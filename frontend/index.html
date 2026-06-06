@@ -1,0 +1,1182 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VN Stock ML Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0a0c10; --panel:#0f1319; --panel2:#12161d; --border:#1d242f;
+  --text:#c9d1d9; --muted:#6b7686; --dim:#3a424f;
+  --amber:#f5a623; --green:#3fb950; --red:#f85149; --blue:#58a6ff;
+  --purple:#a371f7;
+  --mono:'IBM Plex Mono',monospace; --disp:'Syne',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);
+  font-size:14px;line-height:1.5;
+  background-image:radial-gradient(circle at 15% 0,rgba(245,166,35,.06),transparent 40%),
+    radial-gradient(circle at 85% 100%,rgba(88,166,255,.05),transparent 45%);
+  min-height:100vh}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px}
+header{display:flex;align-items:baseline;justify-content:space-between;
+  border-bottom:1px solid var(--border);padding-bottom:18px;margin-bottom:14px;flex-wrap:wrap;gap:12px}
+h1{font-family:var(--disp);font-weight:800;font-size:26px;letter-spacing:-.5px}
+h1 .dot{color:var(--amber)}
+.sub{color:var(--muted);font-size:12px;letter-spacing:.5px}
+
+/* ── Tab Bar ──────────────────────────────────────────────── */
+.tab-bar{margin-bottom:16px}
+.tab-scroll{display:flex;gap:4px;overflow-x:auto;padding-bottom:0;
+  border-bottom:1px solid var(--border);
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.tab-item{display:flex;align-items:center;gap:6px;padding:7px 12px 6px;
+  background:var(--panel);border:1px solid var(--border);border-bottom:2px solid transparent;
+  border-radius:7px 7px 0 0;cursor:pointer;white-space:nowrap;font-size:12px;
+  transition:.15s;flex-shrink:0;margin-bottom:-1px}
+.tab-item:hover{border-top-color:var(--muted);border-left-color:var(--muted);border-right-color:var(--muted)}
+.tab-item.active{border-top-color:var(--amber);border-left-color:var(--amber);border-right-color:var(--amber);
+  border-bottom:2px solid var(--bg);background:var(--panel2);position:relative;z-index:1}
+.tab-sym{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--text)}
+.tab-meta{color:var(--dim);font-size:10px}
+.tab-close{background:none;border:none;color:var(--muted);cursor:pointer;
+  font-size:16px;padding:0 0 0 4px;line-height:1;font-family:var(--mono);transition:.15s}
+.tab-close:hover{color:var(--red)}
+
+/* ── Controls ─────────────────────────────────────────────── */
+.controls{display:grid;grid-template-columns:1.4fr .9fr .9fr .7fr auto;gap:12px;
+  background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+input,select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
+  font-family:var(--mono);font-size:14px;padding:9px 11px;border-radius:7px;outline:none}
+input:focus,select:focus{border-color:var(--amber)}
+button.run{background:var(--amber);color:#0a0c10;border:none;font-family:var(--disp);font-weight:700;
+  font-size:14px;padding:0 22px;border-radius:7px;cursor:pointer;align-self:end;height:39px;transition:.15s}
+button.run:hover{filter:brightness(1.1)}
+button.run:disabled{opacity:.5;cursor:wait}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:26px}
+.chip{font-size:12px;color:var(--muted);border:1px solid var(--border);background:var(--panel);
+  padding:4px 11px;border-radius:20px;cursor:pointer;transition:.15s}
+.chip:hover{border-color:var(--amber);color:var(--amber)}
+
+/* ── Error / Empty ────────────────────────────────────────── */
+.err{display:none;border:1px solid var(--red);background:rgba(248,81,73,.08);color:var(--red);
+  padding:14px 18px;border-radius:10px;margin-bottom:18px;font-size:13px}
+.empty{color:var(--dim);text-align:center;padding:60px 0;font-size:13px}
+
+/* ── Animations ───────────────────────────────────────────── */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── Modal Overlay ────────────────────────────────────────── */
+.modal-overlay{position:fixed;inset:0;background:rgba(10,12,16,.88);
+  backdrop-filter:blur(4px);z-index:1000;display:flex;align-items:center;justify-content:center}
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:16px;
+  padding:32px;width:min(600px,94vw);max-height:88vh;overflow-y:auto;
+  box-shadow:0 24px 80px rgba(0,0,0,.6)}
+.spinner-lg{width:32px;height:32px;border:3px solid var(--border);
+  border-top-color:var(--amber);border-radius:50%;
+  animation:spin .8s linear infinite;flex-shrink:0}
+.modal-hdr{display:flex;align-items:center;gap:16px;margin-bottom:20px}
+.modal-title{font-family:var(--disp);font-weight:700;font-size:18px;color:var(--amber)}
+.modal-cur{font-size:12px;color:var(--muted);margin-top:4px}
+.modal-prog-wrap{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.modal-prog-bar{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+.modal-prog-fill{height:100%;background:var(--amber);border-radius:4px;width:0;transition:width .4s ease}
+.modal-timer{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:18px}
+.modal-stages{border:1px solid var(--border);border-radius:8px;background:var(--panel2);
+  margin-bottom:14px;overflow:hidden}
+.mstg{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);
+  padding:8px 14px;border-bottom:1px solid var(--border)}
+.mstg:last-child{border-bottom:none}
+.mstg-icon{width:18px;text-align:center;flex-shrink:0}
+.mstg-det{font-size:11px;color:var(--dim);margin-left:auto;max-width:220px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modal-year-chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}
+.modal-model-rows{display:flex;flex-direction:column;gap:6px}
+
+/* ── Year chips ───────────────────────────────────────────── */
+.yr-chip{font-size:11px;padding:2px 8px;border-radius:4px;
+  background:var(--border);color:var(--dim);transition:all .25s;border:1px solid transparent}
+.yr-chip.done{background:rgba(63,185,80,.12);color:var(--green);border-color:var(--green)}
+
+/* ── Model Rows ───────────────────────────────────────────── */
+.mr{display:flex;align-items:center;gap:8px;font-size:12px}
+.mr-dot{width:8px;height:8px;border-radius:50%;background:var(--dim);flex-shrink:0;transition:.3s}
+.mr-dot.running{background:var(--amber);box-shadow:0 0 6px var(--amber);animation:pulse 1s ease infinite}
+.mr-dot.done{background:var(--green)}
+.mr-name{width:130px;color:var(--text);font-weight:600}
+.mr-algo{width:140px;color:var(--muted)}
+.mr-barwrap{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.mr-fill{height:100%;width:0;border-radius:3px;transition:width .2s linear}
+.mr-status{font-size:11px;color:var(--muted);width:80px;text-align:right;white-space:nowrap}
+
+/* ── Verdict ──────────────────────────────────────────────── */
+.verdict{display:none;border:1px solid var(--border);border-radius:12px;padding:22px 26px;margin-bottom:22px;
+  background:linear-gradient(135deg,var(--panel2),var(--panel));position:relative;overflow:hidden}
+.verdict::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px}
+.verdict.no::before{background:var(--green)}
+.verdict.yes::before{background:var(--amber)}
+.verdict .q{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px}
+.verdict .a{font-family:var(--disp);font-weight:800;font-size:30px;letter-spacing:-.5px;margin-bottom:8px}
+.verdict.no .a{color:var(--green)}.verdict.yes .a{color:var(--amber)}
+.verdict p{color:var(--muted);font-size:13px;max-width:760px}
+.meta{display:flex;gap:26px;margin-top:14px;flex-wrap:wrap;font-size:12px}
+.meta b{color:var(--text);font-weight:600}
+.src-real{color:var(--green)}.src-syn{color:var(--amber)}
+
+/* ── Model Cards ─────────────────────────────────────────── */
+.model-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px}
+.mc{background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:14px 16px;cursor:pointer;transition:.15s;position:relative;overflow:hidden}
+.mc::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.mc:hover{border-color:var(--muted)}
+.mc.active{border-color:inherit}
+.mc-icon{font-size:22px;margin-bottom:6px}
+.mc-name{font-family:var(--disp);font-weight:700;font-size:13px;margin-bottom:2px}
+.mc-algo{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.4}
+.mc-rmse{font-size:12px}
+.mc-rmse b{font-size:15px}
+.mc-badge{display:inline-block;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;margin-left:4px}
+.mc-badge.win{background:rgba(63,185,80,.15);color:var(--green)}
+.mc-badge.base{background:rgba(248,81,73,.12);color:var(--red)}
+.mc-detail-btn{font-size:11px;color:var(--muted);border:none;background:none;
+  cursor:pointer;font-family:var(--mono);padding:0;margin-top:6px;
+  text-decoration:underline;text-underline-offset:2px}
+.mc-detail-btn:hover{color:var(--text)}
+
+/* ── Charts Grid ─────────────────────────────────────────── */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
+.card.full{grid-column:1/-1}
+.card h3{font-family:var(--disp);font-weight:700;font-size:15px;margin-bottom:4px}
+.card .hint{font-size:11.5px;color:var(--muted);margin-bottom:14px}
+.chartbox{position:relative;height:300px}
+.chartbox.tall{height:340px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:right;padding:9px 10px;border-bottom:1px solid var(--border)}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+tr.win td{color:var(--green)}tr.base td{color:var(--amber)}
+.tag{font-size:10px;padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:600}
+.tag.win{background:rgba(63,185,80,.15);color:var(--green)}
+.tag.base{background:rgba(245,166,35,.15);color:var(--amber)}
+
+/* ── Educational Accordion ───────────────────────────────── */
+.edu-section{margin-top:32px}
+.edu-section>h2{font-family:var(--disp);font-weight:700;font-size:18px;
+  margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.edu-section>h2::after{content:'';flex:1;height:1px;background:var(--border)}
+.acc-item{border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden}
+.acc-hdr{display:flex;align-items:center;gap:12px;padding:14px 18px;cursor:pointer;
+  background:var(--panel);transition:.15s;user-select:none}
+.acc-hdr:hover{background:var(--panel2)}
+.acc-num{font-family:var(--disp);font-weight:800;font-size:18px;color:var(--amber);
+  width:28px;flex-shrink:0;line-height:1}
+.acc-title{font-weight:600;font-size:14px;flex:1}
+.acc-tag{font-size:10px;padding:2px 8px;border-radius:10px;background:var(--border);color:var(--muted)}
+.acc-arrow{color:var(--muted);font-size:12px;transition:.2s;margin-left:auto}
+.acc-item.open .acc-arrow{transform:rotate(180deg)}
+.acc-body{display:none;padding:20px 22px;background:var(--panel2);border-top:1px solid var(--border)}
+.acc-item.open .acc-body{display:block}
+.acc-body h4{font-family:var(--disp);font-weight:700;font-size:13px;
+  color:var(--amber);margin:16px 0 8px;text-transform:uppercase;letter-spacing:.5px}
+.acc-body h4:first-child{margin-top:0}
+.acc-body p{color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:10px}
+.acc-body p strong{color:var(--text)}
+.acc-body .formula{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:12px 16px;font-size:14px;color:var(--green);letter-spacing:.5px;
+  margin:8px 0 12px;overflow-x:auto;white-space:nowrap}
+.acc-body .formula-explain{font-size:12px;color:var(--muted);margin-top:-6px;margin-bottom:12px}
+.acc-body ul{color:var(--muted);font-size:13px;line-height:1.7;padding-left:20px;margin-bottom:10px}
+.acc-body ul li{margin-bottom:4px}
+.acc-body ul li strong{color:var(--text)}
+.warn-box{background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);
+  border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin:8px 0}
+.ok-box{background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.25);
+  border-radius:8px;padding:10px 14px;font-size:12px;color:var(--green);margin:8px 0}
+.info-box{background:rgba(88,166,255,.07);border:1px solid rgba(88,166,255,.2);
+  border-radius:8px;padding:10px 14px;font-size:12px;color:var(--blue);margin:8px 0}
+.feat-table{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0}
+.feat-table th{background:var(--bg);color:var(--muted);padding:6px 10px;
+  border:1px solid var(--border);font-size:11px;text-transform:uppercase}
+.feat-table td{padding:7px 10px;border:1px solid var(--border);line-height:1.4}
+.feat-table td:first-child{color:var(--green);font-weight:600;font-size:11px;white-space:nowrap}
+.feat-table td:nth-child(2){color:var(--amber);font-size:11px;white-space:nowrap}
+.feat-table td:nth-child(3){color:var(--muted);font-size:12px}
+.feat-table tr:nth-child(even) td{background:rgba(255,255,255,.01)}
+.scale-table{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0}
+.scale-table th{background:var(--bg);color:var(--muted);padding:7px 12px;
+  border:1px solid var(--border);font-size:11px;text-transform:uppercase;text-align:left}
+.scale-table td{padding:8px 12px;border:1px solid var(--border);text-align:left}
+.scale-table td:first-child{font-weight:600;color:var(--text)}
+.scale-yes{color:var(--amber)}.scale-no{color:var(--green)}
+.stack-diag{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:18px 20px;font-size:12px;line-height:2;overflow-x:auto;margin:10px 0}
+.stack-diag .label-box{background:var(--panel);border:1px solid var(--border);
+  border-radius:5px;padding:3px 10px;font-size:11px;white-space:nowrap}
+.stack-diag .arrow{color:var(--muted);padding:0 6px}
+.stack-diag .meta-box{background:rgba(163,113,247,.12);border:1px solid var(--purple);
+  border-radius:5px;padding:3px 10px;font-size:11px;color:var(--purple);white-space:nowrap}
+.stack-diag .out-box{background:rgba(245,166,35,.1);border:1px solid var(--amber);
+  border-radius:5px;padding:3px 10px;font-size:11px;color:var(--amber);white-space:nowrap}
+.fold-chart-wrap{margin-top:12px}
+.fold-chart-wrap h4{margin-bottom:8px}
+.fold-chartbox{position:relative;height:180px}
+.wf-diag{font-size:11px;font-family:var(--mono);line-height:1.8;
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:14px 16px;margin:8px 0;overflow-x:auto;white-space:pre;color:var(--muted)}
+
+/* ── Toast ────────────────────────────────────────────────── */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--panel);
+  border:1px solid var(--amber);color:var(--amber);padding:10px 18px;
+  border-radius:8px;font-size:13px;z-index:2000;
+  transition:opacity .5s;pointer-events:none}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media(max-width:960px){.model-cards{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:700px){
+  .controls{grid-template-columns:1fr 1fr}
+  .grid{grid-template-columns:1fr}
+  button.run{grid-column:1/-1}
+  .model-cards{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- ── Header ───────────────────────────────────────────── -->
+  <header>
+    <div>
+      <h1>VN Stock ML Lab<span class="dot">.</span></h1>
+      <div class="sub">WALK-FORWARD · GRADIENT BOOSTING · RANDOM FOREST · ELASTICNET · STACKING</div>
+    </div>
+    <div class="sub" id="srcInfo">đang kiểm tra nguồn dữ liệu…</div>
+  </header>
+
+  <!-- ── Tab Bar ──────────────────────────────────────────── -->
+  <div class="tab-bar" id="tabBar" style="display:none">
+    <div class="tab-scroll" id="tabScroll"></div>
+  </div>
+
+  <!-- ── Controls ─────────────────────────────────────────── -->
+  <div class="controls">
+    <div><label>Mã chứng khoán</label><input id="symbol" value="HPG" placeholder="VD: HPG, FPT, VNM…" /></div>
+    <div><label>Từ ngày</label><input type="date" id="start" value="2020-01-01" /></div>
+    <div><label>Đến ngày</label><input type="date" id="end" value="2026-05-31" /></div>
+    <div><label>Chân trời (phiên)</label>
+      <select id="horizon"><option>5</option><option>10</option><option>20</option></select></div>
+    <button class="run" id="runBtn" onclick="run()">Phân tích</button>
+  </div>
+  <div class="chips" id="chips"></div>
+
+  <!-- ── Error ────────────────────────────────────────────── -->
+  <div class="err" id="err"></div>
+
+  <!-- ── Verdict ───────────────────────────────────────────── -->
+  <div class="verdict" id="verdict">
+    <div class="q">Câu hỏi trung tâm: Mô hình ML có đánh bại baseline "random walk" không?</div>
+    <div class="a" id="verdictA"></div>
+    <p id="verdictP"></p>
+    <div class="meta" id="metaRow"></div>
+  </div>
+
+  <!-- ── Model Cards ───────────────────────────────────────── -->
+  <div class="model-cards" id="modelCards" style="display:none"></div>
+
+  <!-- ── Charts / Table ───────────────────────────────────── -->
+  <div id="results" style="display:none">
+    <div class="card full" style="margin-bottom:18px">
+      <h3>Lịch sử giá đóng cửa</h3>
+      <div class="hint" id="priceHint"></div>
+      <div class="chartbox"><canvas id="priceChart"></canvas></div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h3>So sánh sai số ngoài mẫu (OOS RMSE)</h3>
+        <div class="hint">Thấp hơn = tốt hơn. Đường amber = baseline random-walk.</div>
+        <div class="chartbox"><canvas id="rmseChart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Độ chính xác hướng (Directional Accuracy)</h3>
+        <div class="hint">Đường xám = 0.50 (tung đồng xu). &gt;0.55 ổn định mới đáng chú ý.</div>
+        <div class="chartbox"><canvas id="dirChart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Dự đoán vs Thực tế — mô hình tốt nhất</h3>
+        <div class="hint" id="scatterHint"></div>
+        <div class="chartbox"><canvas id="scatterChart"></canvas></div>
+      </div>
+      <div class="card">
+        <h3>Bảng chỉ số đầy đủ</h3>
+        <div class="hint">Sắp xếp theo RMSE tăng dần. R² &lt; 0 = tệ hơn đoán trung bình.</div>
+        <div style="overflow:auto;max-height:300px"><table id="metricsTable"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Educational Accordion ────────────────────────────── -->
+  <div class="edu-section" id="eduSection" style="display:none">
+    <h2>Giải thích chi tiết — Dành cho học viên</h2>
+
+    <div class="acc-item" id="acc-data">
+      <div class="acc-hdr" onclick="toggleAcc('acc-data')">
+        <span class="acc-num">①</span>
+        <span class="acc-title">Tải & Kiểm tra dữ liệu</span>
+        <span class="acc-tag">Data Validation</span>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body">
+        <h4>Các bước thực hiện</h4>
+        <ul>
+          <li><strong>Sắp xếp theo ngày tăng dần</strong> — đảm bảo thứ tự thời gian tuyến tính.</li>
+          <li><strong>Kiểm tra cột OHLCV</strong> — date, open, high, low, close, volume phải đầy đủ.</li>
+          <li><strong>Phát hiện NaN / Inf</strong> — dữ liệu thiếu hoặc vô cực phá vỡ mọi phép tính.</li>
+          <li><strong>Kiểm tra độ dài tối thiểu</strong> — cần ≥ 120 phiên để rolling indicators có ý nghĩa.</li>
+        </ul>
+        <div class="warn-box">⚠ <strong>Nếu bỏ qua:</strong> Mô hình học từ dữ liệu sai thứ tự (look-ahead bias) — RMSE thấp ảo, không phản ánh khả năng dự đoán thực tế.</div>
+        <div class="ok-box">✓ <strong>Kết quả lần chạy này</strong> hiển thị ở modal loading: số phiên, số cột, nguồn dữ liệu.</div>
+        <p>Dữ liệu đến từ <strong>vnstock</strong> (nếu cài đặt và có mạng) hoặc <strong>synthetic fallback</strong> (mô phỏng theo chế độ thị trường VN 2020–2026, seed theo mã để tái lập được).</p>
+      </div>
+    </div>
+
+    <div class="acc-item" id="acc-feat">
+      <div class="acc-hdr" onclick="toggleAcc('acc-feat')">
+        <span class="acc-num">②</span>
+        <span class="acc-title">Feature Engineering — 15 đặc trưng kỹ thuật</span>
+        <span class="acc-tag">Anti-Leakage</span>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body">
+        <h4>Nguyên tắc cốt lõi: Không được dùng thông tin tương lai</h4>
+        <p>Mọi đặc trưng tại thời điểm <strong>t</strong> chỉ được dùng dữ liệu ≤ t. Biến mục tiêu là lợi suất <em>tương lai</em> (t → t+h), tính bằng <code>shift(-h)</code>.</p>
+        <div class="warn-box">⚠ <strong>Nếu vi phạm (look-ahead bias):</strong> Mô hình "biết trước tương lai" → RMSE cực thấp trong backtest nhưng <em>hoàn toàn vô dụng</em> khi deploy.</div>
+        <h4>Bảng 15 đặc trưng</h4>
+        <table class="feat-table">
+          <tr><th>Tên feature</th><th>Công thức</th><th>Ý nghĩa</th></tr>
+          <tr><td>ret_1d</td><td>close_t / close_{t-1} − 1</td><td>Lợi suất ngày, tín hiệu momentum ngắn nhất</td></tr>
+          <tr><td>ret_5d</td><td>close_t / close_{t-5} − 1</td><td>Momentum 1 tuần giao dịch</td></tr>
+          <tr><td>ret_10d</td><td>close_t / close_{t-10} − 1</td><td>Momentum 2 tuần</td></tr>
+          <tr><td>price_to_ma20</td><td>close / MA20 − 1</td><td>Vị trí giá so với trung bình 20 phiên</td></tr>
+          <tr><td>ma5_to_ma20</td><td>MA5 / MA20 − 1</td><td>Tín hiệu cắt MA — golden/death cross</td></tr>
+          <tr><td>ma10_to_ma20</td><td>MA10 / MA20 − 1</td><td>Tín hiệu cắt MA trung hạn</td></tr>
+          <tr><td>vol_10d</td><td>std(ret_1d, 10)</td><td>Biến động ngắn hạn — thị trường đang hỗn loạn?</td></tr>
+          <tr><td>vol_20d</td><td>std(ret_1d, 20)</td><td>Biến động trung hạn</td></tr>
+          <tr><td>rsi_14</td><td>100 − 100/(1 + RS)</td><td>RSI / 100: [0,1]. &lt;0.3 quá bán, &gt;0.7 quá mua</td></tr>
+          <tr><td>hl_range</td><td>(high − low) / close</td><td>Biên độ trong phiên — thanh khoản & uncertainty</td></tr>
+          <tr><td>close_pos</td><td>(close − low) / (high − low)</td><td>Giá đóng cửa gần đỉnh hay đáy phiên?</td></tr>
+          <tr><td>vol_ratio</td><td>volume / MA20_volume</td><td>Khối lượng so với trung bình — dòng tiền bất thường</td></tr>
+          <tr><td>volume_chg</td><td>volume_t / volume_{t-1} − 1</td><td>Biến động khối lượng ngày</td></tr>
+          <tr><td>dist_52w_high</td><td>close / max(close, 252) − 1</td><td>Khoảng cách tới đỉnh 52 tuần (âm = dưới đỉnh)</td></tr>
+          <tr><td>dist_52w_low</td><td>close / min(close, 252) − 1</td><td>Khoảng cách tới đáy 52 tuần (dương = trên đáy)</td></tr>
+        </table>
+        <p style="margin-top:8px">Sau khi tính 15 features, các dòng có <strong>NaN</strong> (rolling window chưa đủ) và <strong>Inf</strong> (chia cho 0) bị loại.</p>
+      </div>
+    </div>
+
+    <div class="acc-item" id="acc-scale">
+      <div class="acc-hdr" onclick="toggleAcc('acc-scale')">
+        <span class="acc-num">③</span>
+        <span class="acc-title">Chuẩn hóa dữ liệu — StandardScaler</span>
+        <span class="acc-tag">StandardScaler</span>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body">
+        <h4>Công thức</h4>
+        <div class="formula">z = (x − μ) / σ</div>
+        <div class="formula-explain">Mỗi feature được đưa về mean = 0, std = 1. μ và σ tính <em>chỉ trên tập huấn luyện</em>, áp dụng cho cả tập kiểm tra — tránh data leakage.</div>
+        <h4>Mô hình nào cần chuẩn hóa?</h4>
+        <table class="scale-table">
+          <tr><th>Mô hình</th><th>Cần chuẩn hóa?</th><th>Lý do</th></tr>
+          <tr><td>Ridge</td><td class="scale-yes">✓ Có</td><td>Penalty L2 = α·‖w‖² nhạy với thang đo — feature lớn bị phạt không vì tầm quan trọng.</td></tr>
+          <tr><td>ElasticNet</td><td class="scale-yes">✓ Có</td><td>Penalty L1+L2 — cùng lý do. Coordinate Descent hội tụ nhanh hơn khi thang đo đồng đều.</td></tr>
+          <tr><td>Random Forest</td><td class="scale-no">✗ Không</td><td>Cây quyết định chia theo ngưỡng. Phép biến đổi đơn điệu không thay đổi thứ tự → kết quả giống nhau.</td></tr>
+          <tr><td>Gradient Boosting</td><td class="scale-no">✗ Không</td><td>Cùng lý do — boosting cây bất biến với monotonic transform.</td></tr>
+          <tr><td>StackingEnsemble</td><td class="scale-yes">✓ Có</td><td>Meta-learner là Ridge → meta-features cần được chuẩn hóa.</td></tr>
+        </table>
+        <div class="info-box">💡 StandardScaler được đặt <strong>bên trong sklearn Pipeline</strong>. Khi cross-validate, scaler tự động fit lại trên mỗi fold training — đảm bảo không có data leakage.</div>
+      </div>
+    </div>
+
+    <div class="acc-item" id="acc-wf">
+      <div class="acc-hdr" onclick="toggleAcc('acc-wf')">
+        <span class="acc-num">④</span>
+        <span class="acc-title">Walk-Forward Validation — Expanding Window</span>
+        <span class="acc-tag">Đánh giá</span>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body">
+        <h4>Tại sao không dùng random train/test split?</h4>
+        <p>Chuỗi thời gian có <strong>thứ tự quan trọng</strong>. Random split → tập kiểm tra có thể chứa dữ liệu <em>trước</em> tập huấn luyện → look-ahead bias.</p>
+        <h4>Cơ chế Expanding Window</h4>
+        <div class="wf-diag" id="wfDiagText"></div>
+        <ul>
+          <li><strong>Bước 1:</strong> Train trên [0 : t₀], predict [t₀ : t₀+step].</li>
+          <li><strong>Bước 2:</strong> Cuốn t tiến lên step phiên, train trên [0 : t₀+step], predict [t₀+step : t₀+2·step].</li>
+          <li><strong>Lặp đến hết dữ liệu.</strong> Gom tất cả dự đoán out-of-sample → tính RMSE tổng.</li>
+        </ul>
+        <div class="ok-box">✓ <strong>Ưu điểm:</strong> Mỗi dự đoán luôn dùng mô hình train trên quá khứ, predict tương lai — phản ánh chính xác performance thực tế.</div>
+        <h4>Kết quả per-fold của từng mô hình</h4>
+        <div id="foldCharts"></div>
+      </div>
+    </div>
+
+    <div class="acc-item" id="acc-models">
+      <div class="acc-hdr" onclick="toggleAcc('acc-models')">
+        <span class="acc-num">⑤</span>
+        <span class="acc-title">Chi tiết các mô hình ML</span>
+        <span class="acc-tag">5 mô hình</span>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body">
+        <div id="modelDetailContent"></div>
+      </div>
+    </div>
+
+    <div class="acc-item" id="acc-stack">
+      <div class="acc-hdr" onclick="toggleAcc('acc-stack')">
+        <span class="acc-num">⑥</span>
+        <span class="acc-title">Stacking Ensemble — Meta-Learning</span>
+        <span class="acc-tag">Meta-Learning</span>
+        <span class="acc-arrow">▼</span>
+      </div>
+      <div class="acc-body">
+        <h4>Kiến trúc</h4>
+        <div class="stack-diag">
+          <div style="display:flex;align-items:flex-start;gap:0;margin-bottom:12px">
+            <div style="display:flex;flex-direction:column;gap:6px;margin-right:8px">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span class="label-box" style="background:rgba(245,166,35,.1);border-color:var(--amber);color:var(--amber)">⚡ ElasticNet</span>
+                <span class="arrow">──┐</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span class="label-box" style="background:rgba(63,185,80,.1);border-color:var(--green);color:var(--green)">🌲 Random Forest</span>
+                <span class="arrow">──┼──→</span>
+                <span class="meta-box">🧩 meta-features (N×3)</span>
+                <span class="arrow">──→</span>
+                <span class="meta-box" style="border-color:var(--blue);color:var(--blue)">📐 Ridge (meta-learner)</span>
+                <span class="arrow">──→</span>
+                <span class="out-box">Dự đoán cuối</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span class="label-box" style="background:rgba(248,81,73,.1);border-color:var(--red);color:var(--red)">🚀 GBR</span>
+                <span class="arrow">──┘</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <h4>Cơ chế Out-of-Fold Prediction</h4>
+        <p>Nếu chỉ dùng base models predict thẳng trên training data → meta-learner học trên <strong>dữ liệu đã fit</strong> → overfit nghiêm trọng.</p>
+        <p>Giải pháp: <strong>Cross-Validation (5 folds)</strong>. Với mỗi fold: train 3 base models trên 4 folds còn lại, predict fold đang giữ → out-of-fold predictions sạch. Ghép lại → meta-features N×3. Train Ridge trên đó.</p>
+        <div class="info-box">💡 <strong>Khi nào Stacking hiệu quả?</strong> Khi errors của base models <em>không tương quan</em>: ElasticNet sai ở đâu thì RF đúng ở đó. Ridge meta-learner phát hiện và kết hợp tối ưu.</div>
+        <div class="warn-box">⚠ <strong>Hạn chế:</strong> Thời gian = tổng thời gian base models × 5 folds → chậm nhất trong 5 mô hình.</div>
+        <h4>Hyperparameters</h4>
+        <ul>
+          <li><strong>Base models:</strong> ElasticNet(α=0.1, ρ=0.5), RandomForest(60 cây), GBR(60 cây, lr=0.05)</li>
+          <li><strong>Meta-learner:</strong> Ridge(α=1.0)</li>
+          <li><strong>CV folds:</strong> 5 · <strong>Parallel:</strong> n_jobs=-1</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Empty state ────────────────────────────────────────── -->
+  <div class="empty" id="empty">Nhập mã và bấm <b>Phân tích</b> để bắt đầu.</div>
+</div>
+
+<!-- ── Modal Overlay ─────────────────────────────────────────── -->
+<div class="modal-overlay" id="modalOverlay" style="display:none">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <div class="spinner-lg"></div>
+      <div>
+        <div class="modal-title" id="modalTitle">Đang phân tích…</div>
+        <div class="modal-cur" id="modalCur">Chuẩn bị kết nối…</div>
+      </div>
+    </div>
+    <div class="modal-prog-wrap">
+      <div class="modal-prog-bar"><div class="modal-prog-fill" id="modalFill"></div></div>
+      <span id="modalPct" style="font-size:12px;color:var(--muted);white-space:nowrap">0%</span>
+    </div>
+    <div class="modal-timer">
+      <span id="timerElapsed">Đã chạy: 00:00</span>
+      <span id="timerRemaining">Còn lại: --:--</span>
+    </div>
+    <div class="modal-stages">
+      <div class="mstg">
+        <span class="mstg-icon" id="icnFetch">○</span>
+        <span>① Tải dữ liệu</span>
+        <span class="mstg-det" id="mdetFetch"></span>
+      </div>
+      <div class="mstg">
+        <span class="mstg-icon" id="icnValidate">○</span>
+        <span>② Kiểm tra dữ liệu</span>
+        <span class="mstg-det" id="mdetValidate"></span>
+      </div>
+      <div class="mstg">
+        <span class="mstg-icon" id="icnFeatures">○</span>
+        <span>③ Feature Engineering</span>
+        <span class="mstg-det" id="mdetFeatures"></span>
+      </div>
+      <div class="mstg">
+        <span class="mstg-icon" id="icnTraining">○</span>
+        <span>④ Huấn luyện &amp; Đánh giá</span>
+        <span class="mstg-det" id="mdetTraining"></span>
+      </div>
+    </div>
+    <div class="modal-year-chips" id="modalYearChips"></div>
+    <div class="modal-model-rows" id="modalModelRows"></div>
+  </div>
+</div>
+
+<script>
+/* ── Helpers ─────────────────────────────────────────────── */
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+const UP=css('--green'),DOWN=css('--red'),AMBER=css('--amber'),
+      MUTED=css('--muted'),BORDER=css('--border'),TEXT=css('--text'),BLUE=css('--blue');
+Chart.defaults.color=MUTED; Chart.defaults.borderColor=BORDER;
+Chart.defaults.font.family="'IBM Plex Mono',monospace";
+let charts={};
+function g(id){return document.getElementById(id)}
+function show(id){g(id).style.display=''}
+function hide(id){g(id).style.display='none'}
+function destroy(k){if(charts[k]){charts[k].destroy();delete charts[k]}}
+function esc(s){return s.replace(/[^a-zA-Z0-9]/g,'_')}
+function labelModel(name){const m=MODEL_META[name];return m?m.icon+' '+name:name}
+
+/* ── Model metadata ──────────────────────────────────────── */
+const MODEL_META = {
+  Ridge:{icon:'📐',color:'#58a6ff',algo:'L2 Regularization',params:'α=1.0'},
+  ElasticNet:{icon:'⚡',color:'#f5a623',algo:'Coordinate Descent',params:'α=0.1, ρ=0.5'},
+  RandomForest:{icon:'🌲',color:'#3fb950',algo:'Bagging + Random Subspace',params:'120 trees, min_leaf=5'},
+  GradientBoosting:{icon:'🚀',color:'#f85149',algo:'Gradient Boosting (Stochastic)',params:'120 trees, lr=0.05, depth=3'},
+  StackingEnsemble:{icon:'🧩',color:'#a371f7',algo:'Meta-Learning',params:'EN + RF + GBR → Ridge'},
+};
+const MODEL_FULL = {
+  Ridge:{full:'Ridge Regression (L2)',year:'1970 — Hoerl & Kennard',
+    formula:'min ½·‖Xw−y‖² + α·‖w‖²',
+    desc:'Thêm hình phạt bình phương trọng số vào MSE. α lớn → hệ số co dần về 0 nhưng không bao giờ bằng đúng 0.',
+    strength:'Ổn định, nhanh, xử lý tốt khi features tương quan nhau (multicollinearity).',
+    weakness:'Không loại bỏ hoàn toàn features thừa (không tạo sparsity).'},
+  ElasticNet:{full:'ElasticNet Regression (L1+L2)',year:'2005 — Zou & Hastie',
+    formula:'min ½·‖Xw−y‖² + α·ρ·‖w‖₁ + α·(1−ρ)/2·‖w‖²',
+    desc:'Kết hợp Lasso (L1) tạo sparsity và Ridge (L2) ổn định. Tối ưu bằng Coordinate Descent.',
+    strength:'Vừa chọn lọc features vừa ổn định khi features tương quan.',
+    weakness:'Cần tune thêm l1_ratio (ρ). Chậm hơn Ridge nếu max_iter lớn.'},
+  RandomForest:{full:'Random Forest Regressor',year:'2001 — Leo Breiman',
+    formula:'ŷ = (1/B)·Σ Treeᵦ(x)',
+    desc:'Xây B=120 cây, mỗi cây train trên bootstrap sample và chỉ xét √p features ngẫu nhiên tại mỗi nút. Dự đoán = trung bình B cây.',
+    strength:'Chống overfit tốt. Tự nhiên xử lý phi tuyến và tương tác features.',
+    weakness:'Kém ngoại suy: không dự đoán tốt ngoài vùng [min, max] của training data.'},
+  GradientBoosting:{full:'Gradient Boosting Regressor',year:'2001 — Jerome H. Friedman',
+    formula:'F_m(x) = F_{m-1}(x) + η·h_m(x)',
+    desc:'Cộng dần 120 weak learners (cây nông depth=3). Mỗi cây fit trên residuals. η=0.05 + subsample=0.8 giúp chống overfit.',
+    strength:'Thường cho accuracy cao nhất trong nhóm tree-based.',
+    weakness:'Nhạy với hyperparameter, dễ overfit nếu n_estimators lớn mà learning_rate cao.'},
+  StackingEnsemble:{full:'Stacking Ensemble (Meta-Learning)',year:'1992 — David Wolpert',
+    formula:'ŷ = Ridge(EN(x), RF(x), GBR(x))',
+    desc:'Hai tầng: (1) 3 base models tạo predictions via 5-fold CV; (2) Ridge học cách kết hợp tối ưu. Dùng out-of-fold predictions tránh data leakage.',
+    strength:'Kết hợp điểm mạnh cả 3 mô hình. Hiệu quả khi errors của base models không tương quan.',
+    weakness:'Chậm nhất (= tổng thời gian base models × 5 folds).'},
+};
+
+/* ── Global state ────────────────────────────────────────── */
+let lastResult = null;
+let totalFolds = 0, numModels = 0;
+let _modelOrder = [];
+const foldData = {};
+let analysisComplete = false;
+let currentSym = '', currentStart = '', currentEnd = '', currentHorizon = 5;
+
+/* ── Tab state ───────────────────────────────────────────── */
+const tabStore = {};
+const tabOrder = [];
+let activeTabKey = null;
+const MAX_TABS = 10;
+
+function getTabKey(sym, start, end, horizon){
+  return `${sym.toUpperCase()}|${start}|${end}|${horizon}`;
+}
+
+function createTab(key, meta){
+  tabStore[key] = {
+    symbol: meta.symbol, start: meta.start,
+    end: meta.end, horizon: +meta.horizon,
+    result: null, foldData: {}
+  };
+  tabOrder.push(key);
+}
+
+function saveToTab(key, result, foldSnap){
+  if(!tabStore[key]) return;
+  tabStore[key].result = result;
+  tabStore[key].foldData = foldSnap;
+}
+
+function renderTabBar(){
+  const scroll = g('tabScroll');
+  scroll.innerHTML = '';
+  tabOrder.forEach(key=>{
+    const entry = tabStore[key]; if(!entry) return;
+    const s = entry.start.slice(0,4), e = entry.end.slice(2,4);
+    const item = document.createElement('div');
+    item.className = 'tab-item' + (key === activeTabKey ? ' active' : '');
+    item.dataset.key = key;
+    item.onclick = (ev)=>{ if(!ev.target.classList.contains('tab-close')) switchTab(key); };
+    const sym = document.createElement('span');
+    sym.className = 'tab-sym'; sym.textContent = entry.symbol;
+    const meta = document.createElement('span');
+    meta.className = 'tab-meta'; meta.textContent = `${s}–${e} h${entry.horizon}`;
+    const btn = document.createElement('button');
+    btn.className = 'tab-close'; btn.textContent = '×';
+    btn.onclick = (ev)=>{ ev.stopPropagation(); closeTab(key); };
+    item.append(sym, meta, btn);
+    scroll.appendChild(item);
+  });
+  g('tabBar').style.display = tabOrder.length > 0 ? '' : 'none';
+}
+
+function switchTab(key){
+  const entry = tabStore[key]; if(!entry) return;
+  activeTabKey = key;
+  renderTabBar();
+  g('symbol').value = entry.symbol;
+  g('start').value = entry.start;
+  g('end').value = entry.end;
+  g('horizon').value = String(entry.horizon);
+  if(entry.result){
+    hide('err'); hide('empty');
+    Object.keys(foldData).forEach(k=>delete foldData[k]);
+    if(entry.foldData) Object.assign(foldData, entry.foldData);
+    const fm = Object.keys(foldData)[0];
+    totalFolds = fm ? (foldData[fm].length || 0) : 0;
+    render(entry.result);
+  }
+}
+
+function closeTab(key){
+  const idx = tabOrder.indexOf(key);
+  if(idx === -1) return;
+  const sym = tabStore[key]?.symbol || key;
+  tabOrder.splice(idx, 1);
+  delete tabStore[key];
+  if(activeTabKey === key){
+    if(tabOrder.length > 0){
+      switchTab(tabOrder[Math.min(idx, tabOrder.length-1)]);
+    } else {
+      activeTabKey = null;
+      hide('results'); hide('verdict'); hide('eduSection');
+      g('modelCards').style.display = 'none';
+      show('empty');
+    }
+  }
+  renderTabBar();
+  return sym;
+}
+
+function evictOldestTab(){
+  if(tabOrder.length === 0) return;
+  const sym = closeTab(tabOrder[0]);
+  showToast(`Đã đóng tab cũ nhất (${sym})`);
+}
+
+function showToast(msg){
+  let t = g('_toast');
+  if(!t){ t = document.createElement('div'); t.id='_toast'; t.className='toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.style.opacity = '1';
+  clearTimeout(t._tid);
+  t._tid = setTimeout(()=>{ t.style.opacity='0'; }, 2800);
+}
+
+/* ── Timer state ─────────────────────────────────────────── */
+let timerId = null, totalEstSec = 0, elapsedSec = 0;
+
+function fmt(s){ return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+
+function estimateSeconds(start, end){
+  const years = new Date(end).getFullYear() - new Date(start).getFullYear() + 1;
+  const estFolds = Math.max(3, Math.round(years * 250 / 40));
+  return Math.round(years * 2 + estFolds * 8.6);
+}
+
+function startTimer(totalSec){
+  totalEstSec = totalSec; elapsedSec = 0;
+  clearInterval(timerId);
+  timerId = setInterval(()=>{
+    elapsedSec++;
+    const rem = Math.max(0, totalEstSec - elapsedSec);
+    g('timerElapsed').textContent = 'Đã chạy: ' + fmt(elapsedSec);
+    g('timerRemaining').textContent = rem > 0 ? 'Còn lại: '+fmt(rem) : 'Sắp xong…';
+  }, 1000);
+}
+
+function stopTimer(){ clearInterval(timerId); timerId = null; }
+
+function recalibrate(totalFoldsActual){
+  const actual = Math.round(elapsedSec + totalFoldsActual * 8.6 + 5);
+  if(actual > totalEstSec) totalEstSec = actual;
+}
+
+/* ── Modal helpers ───────────────────────────────────────── */
+function openModal(sym){
+  g('modalTitle').textContent = `Đang phân tích ${sym.toUpperCase()}`;
+  g('modalCur').textContent = 'Chuẩn bị kết nối…';
+  g('modalFill').style.width = '0';
+  g('modalPct').textContent = '0%';
+  g('timerElapsed').textContent = 'Đã chạy: 00:00';
+  g('timerRemaining').textContent = 'Còn lại: --:--';
+  g('modalYearChips').innerHTML = '';
+  g('modalModelRows').innerHTML = '';
+  ['icnFetch','icnValidate','icnFeatures','icnTraining'].forEach(id=>setIcon(id,'○',false,false));
+  ['mdetFetch','mdetValidate','mdetFeatures','mdetTraining'].forEach(id=>{const el=g(id);if(el)el.textContent='';});
+  g('modalOverlay').style.display = 'flex';
+  startTimer(estimateSeconds(currentStart, currentEnd));
+}
+
+function closeModal(){
+  stopTimer();
+  g('modalOverlay').style.display = 'none';
+}
+
+function updateModalProgress(pct, step){
+  g('modalFill').style.width = Math.min(100, pct)+'%';
+  g('modalPct').textContent = Math.round(pct)+'%';
+  if(step) g('modalCur').textContent = step;
+}
+
+function setIcon(id, icon, spinning, done){
+  const el = g(id); if(!el) return;
+  el.textContent = icon;
+  el.style.color = done ? 'var(--green)' : spinning ? 'var(--amber)' : 'var(--muted)';
+}
+
+/* ── Init ────────────────────────────────────────────────── */
+async function init(){
+  try{
+    const h = await (await fetch('/api/health')).json();
+    const real = h.data_source === 'vnstock';
+    g('srcInfo').innerHTML =
+      `nguồn: <span class="${real?'src-real':'src-syn'}">${h.data_source}</span>`+
+      (real?'':' (mô phỏng — cài vnstock để dùng dữ liệu thật)');
+  }catch(e){ g('srcInfo').textContent='backend chưa chạy' }
+
+  const s = await (await fetch('/api/symbols')).json();
+  const c = g('chips'); c.innerHTML = 'Gợi ý: ';
+  s.suggested.forEach(sym=>{
+    const el = document.createElement('span');
+    el.className = 'chip'; el.textContent = sym;
+    el.onclick = ()=>{ g('symbol').value = sym; run(); };
+    c.appendChild(el);
+  });
+}
+
+/* ── Run ─────────────────────────────────────────────────── */
+let activeES = null;
+
+async function run(){
+  const sym = g('symbol').value.trim().toUpperCase();
+  if(!sym){ g('err').textContent='⚠ Vui lòng nhập mã chứng khoán.'; show('err'); return; }
+
+  const start = g('start').value;
+  const end = g('end').value;
+  const horizon = +g('horizon').value;
+  const key = getTabKey(sym, start, end, horizon);
+
+  // Cache hit — switch immediately without re-fetching
+  if(tabStore[key]){ switchTab(key); return; }
+
+  if(activeES){ activeES.close(); activeES = null; }
+
+  currentSym = sym; currentStart = start; currentEnd = end; currentHorizon = horizon;
+
+  const btn = g('runBtn'); btn.disabled = true;
+  hide('results'); hide('verdict'); hide('err'); hide('empty');
+  g('modelCards').style.display = 'none';
+  hide('eduSection');
+
+  Object.keys(foldData).forEach(k=>delete foldData[k]);
+  totalFolds = 0; numModels = 0; _modelOrder = [];
+  lastResult = null; analysisComplete = false;
+
+  openModal(sym);
+
+  const params = new URLSearchParams({symbol: sym, start, end, horizon});
+  const es = new EventSource(`/api/analyze-stream?${params}`);
+  activeES = es;
+
+  es.onmessage = (e)=>{ try{ handleEvent(JSON.parse(e.data)); }catch(_){} };
+
+  es.onerror = ()=>{
+    if(analysisComplete){ es.close(); activeES = null; return; }
+    es.close(); activeES = null; btn.disabled = false;
+    closeModal();
+    g('err').textContent = '⚠ Lỗi kết nối — kiểm tra backend đang chạy.';
+    show('err'); show('empty');
+  };
+}
+
+/* ── SSE event handlers ──────────────────────────────────── */
+function handleEvent(ev){
+  switch(ev.stage){
+    case 'fetch_start':    onFetchStart(ev); break;
+    case 'fetch_year':     onFetchYear(ev); break;
+    case 'validate':       onValidate(ev); break;
+    case 'features_start': onFeatStart(); break;
+    case 'features_done':  onFeatDone(ev); break;
+    case 'training_start': onTrainingStart(ev); break;
+    case 'model_start':    onModelStart(ev); break;
+    case 'model_fold':     onModelFold(ev); break;
+    case 'model_done':     onModelDone(ev); break;
+    case 'complete':       onComplete(ev); break;
+    case 'error':          onError(ev); break;
+  }
+}
+
+function onFetchStart(ev){
+  setIcon('icnFetch','⟳',true,false);
+  const det = g('mdetFetch'); if(det) det.textContent = `${ev.total} năm`;
+  updateModalProgress(2, `Tải ${ev.total} năm dữ liệu…`);
+  const wrap = g('modalYearChips'); wrap.innerHTML='';
+  ev.years.forEach(yr=>{
+    const d = document.createElement('div');
+    d.className='yr-chip'; d.id=`yr-${yr}`; d.textContent=yr;
+    wrap.appendChild(d);
+  });
+}
+
+function onFetchYear(ev){
+  const chip = g(`yr-${ev.year}`); if(chip) chip.className='yr-chip done';
+  const pct = 15 * ev.done / ev.total;
+  const det = g('mdetFetch'); if(det) det.textContent = `${ev.done}/${ev.total} năm`;
+  updateModalProgress(pct, `Năm ${ev.year} ✓  (${ev.done}/${ev.total})`);
+  if(ev.done === ev.total) setIcon('icnFetch','✓',false,true);
+}
+
+function onValidate(ev){
+  setIcon('icnValidate','✓',false,true);
+  const det = g('mdetValidate');
+  if(det) det.textContent = `${ev.rows} phiên · ${ev.source}`;
+  updateModalProgress(20, 'Kiểm tra dữ liệu hoàn tất');
+}
+
+function onFeatStart(){
+  setIcon('icnFeatures','⟳',true,false);
+  updateModalProgress(22, 'Tính 15 đặc trưng kỹ thuật…');
+}
+
+function onFeatDone(ev){
+  setIcon('icnFeatures','✓',false,true);
+  const det = g('mdetFeatures');
+  if(det) det.textContent = `${ev.n_features} feat · ${ev.n_samples} mẫu`;
+  updateModalProgress(25, 'Feature Engineering hoàn tất');
+}
+
+function onTrainingStart(ev){
+  setIcon('icnTraining','⟳',true,false);
+  totalFolds = ev.total_folds;
+  numModels = ev.models.length;
+  _modelOrder = ev.models;
+  recalibrate(totalFolds);
+  const wrap = g('modalModelRows'); wrap.innerHTML='';
+  ev.models.forEach(name=>{
+    foldData[name] = [];
+    const m = MODEL_META[name] || {icon:'●',color:AMBER,algo:'',params:''};
+    const row = document.createElement('div');
+    row.className = 'mr'; row.id = `mr-${esc(name)}`;
+    row.innerHTML =
+      `<div class="mr-dot" id="mrd-${esc(name)}"></div>`+
+      `<div class="mr-name">${m.icon} ${name}</div>`+
+      `<div class="mr-algo">${m.algo}</div>`+
+      `<div class="mr-barwrap"><div class="mr-fill" id="mrf-${esc(name)}" style="background:${m.color}"></div></div>`+
+      `<div class="mr-status" id="mrs-${esc(name)}">chờ</div>`;
+    wrap.appendChild(row);
+  });
+}
+
+function onModelStart(ev){
+  const mIdx = _modelOrder.indexOf(ev.model);
+  const dot = g(`mrd-${esc(ev.model)}`); if(dot) dot.className='mr-dot running';
+  const st = g(`mrs-${esc(ev.model)}`); if(st){ st.textContent='đang chạy…'; st.style.color=AMBER; }
+  const pct = 25 + 75 * Math.max(0,mIdx) / numModels;
+  updateModalProgress(pct, `Huấn luyện ${ev.model}…`);
+  const det = g('mdetTraining'); if(det) det.textContent = ev.model;
+}
+
+function onModelFold(ev){
+  const mIdx = _modelOrder.indexOf(ev.model);
+  if(mIdx >= 0 && totalFolds > 0){
+    const pct = 25 + 75 * (mIdx * totalFolds + ev.fold) / (numModels * totalFolds);
+    updateModalProgress(pct, `${ev.model} — fold ${ev.fold}/${ev.total_folds}`);
+  }
+  const fill = g(`mrf-${esc(ev.model)}`);
+  if(fill) fill.style.width = (ev.fold / ev.total_folds * 100)+'%';
+  const st = g(`mrs-${esc(ev.model)}`);
+  if(st) st.textContent = `fold ${ev.fold}/${ev.total_folds}`;
+  if(foldData[ev.model]) foldData[ev.model].push(ev.fold_rmse);
+}
+
+function onModelDone(ev){
+  const dot = g(`mrd-${esc(ev.model)}`); if(dot) dot.className='mr-dot done';
+  const fill = g(`mrf-${esc(ev.model)}`); if(fill) fill.style.width='100%';
+  const st = g(`mrs-${esc(ev.model)}`);
+  if(st){ st.textContent=`RMSE ${ev.oos_rmse}`; st.style.color=ev.beats_baseline?UP:MUTED; }
+  if(!foldData[ev.model]||!foldData[ev.model].length)
+    foldData[ev.model] = ev.fold_rmses || [];
+}
+
+function onComplete(ev){
+  analysisComplete = true;
+  activeES && activeES.close(); activeES = null;
+  g('runBtn').disabled = false;
+  setIcon('icnTraining','✓',false,true);
+  updateModalProgress(100, 'Hoàn tất!');
+  lastResult = ev.result;
+
+  const key = getTabKey(currentSym, currentStart, currentEnd, currentHorizon);
+  const isNew = !tabStore[key];
+  if(isNew && tabOrder.length >= MAX_TABS) evictOldestTab();
+  if(isNew) createTab(key, {symbol:currentSym, start:currentStart, end:currentEnd, horizon:currentHorizon});
+  saveToTab(key, ev.result, Object.assign({}, ...Object.keys(foldData).map(k=>({[k]:[...foldData[k]]}))));
+  activeTabKey = key;
+  renderTabBar();
+
+  render(ev.result);
+  setTimeout(closeModal, 600);
+}
+
+function onError(ev){
+  if(analysisComplete) return;
+  activeES && activeES.close(); activeES = null;
+  g('runBtn').disabled = false;
+  closeModal();
+  g('err').textContent = '⚠ '+ev.message; show('err'); show('empty');
+}
+
+/* ── Render results ──────────────────────────────────────── */
+function render(d){
+  const v = g('verdict');
+  v.className = 'verdict '+(d.beats_baseline?'yes':'no');
+  g('verdictA').textContent = d.beats_baseline ? 'CÓ — cần soi kỹ leakage' : 'KHÔNG';
+  g('verdictP').textContent = d.beats_baseline
+    ? 'Một mô hình có RMSE thấp hơn baseline. Trên cổ phiếu đơn điều này hiếm — hãy kiểm tra rò rỉ dữ liệu trước khi tin.'
+    : 'Không mô hình nào đánh bại random walk — đúng với thị trường hiệu quả dạng yếu. Đây là kết quả hợp lệ.';
+  const srcReal = d.source==='vnstock';
+  g('metaRow').innerHTML =
+    `<span>Mã: <b>${d.symbol}</b></span><span>Nguồn: <b class="${srcReal?'src-real':'src-syn'}">${d.source}</b></span>`+
+    `<span>Số phiên: <b>${d.n_obs}</b></span><span>Chân trời: <b>${d.horizon} phiên</b></span>`+
+    `<span>σ lợi suất mục tiêu: <b>${d.target_std}</b></span>`;
+  show('verdict');
+  renderModelCards(d);
+  g('priceHint').textContent = `${d.date_range[0]} → ${d.date_range[1]}`; // unit appended by drawPrice
+  g('scatterHint').textContent = `${d.best_model} · đường chéo = dự đoán hoàn hảo`;
+  drawPrice(d.price_series);
+  drawRmse(d.models, d.baseline_rmse);
+  drawDir(d.models);
+  drawScatter(d.scatter);
+  drawTable(d.models);
+  show('results');
+  renderEdu(d);
+  show('eduSection');
+}
+
+function renderModelCards(d){
+  const naive = d.models.find(r=>r.Model.startsWith('Naive'));
+  const bl = naive ? naive.OOS_RMSE : d.baseline_rmse;
+  const ml = d.models.filter(r=>!r.Model.startsWith('Naive'));
+  const wrap = g('modelCards'); wrap.innerHTML='';
+  ml.forEach(r=>{
+    const m = MODEL_META[r.Model]||{icon:'●',color:AMBER,algo:r.Model,params:''};
+    const beat = r.OOS_RMSE < bl;
+    wrap.innerHTML +=
+      `<div class="mc" style="border-top:2px solid ${m.color}" onclick="jumpToModelDetail('${r.Model}')">
+        <div class="mc-icon">${m.icon}</div>
+        <div class="mc-name">${r.Model}</div>
+        <div class="mc-algo">${m.algo}<br><span style="color:var(--dim);font-size:10px">${m.params}</span></div>
+        <div class="mc-rmse">RMSE <b style="color:${beat?UP:DOWN}">${r.OOS_RMSE}</b>
+          <span class="mc-badge ${beat?'win':'base'}">${beat?'▲ Beat':'✗ Miss'}</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">R² ${r.OOS_R2} · Dir ${(r.Direction_Acc*100).toFixed(1)}%</div>
+        <button class="mc-detail-btn">Xem chi tiết ▼</button>
+      </div>`;
+  });
+  wrap.style.display='grid';
+}
+
+function renderEdu(d){
+  const init = Math.min(500, Math.round(d.n_obs*0.5));
+  const step = 40;
+  const lines = [];
+  for(let i=0;i<4;i++){
+    const trainEnd = init+i*step;
+    const testEnd = Math.min(trainEnd+step, d.n_obs);
+    const tb = '█'.repeat(Math.min(20,Math.round(trainEnd/d.n_obs*20)));
+    const pb = '░'.repeat(Math.min(4,Math.round((testEnd-trainEnd)/d.n_obs*20)));
+    lines.push(`Fold ${i+1}: [${tb}] [${pb}]  train:${trainEnd} → predict:${testEnd}`);
+  }
+  lines.push(`  ... (tổng ${totalFolds||'?'} folds)`);
+  g('wfDiagText').textContent = lines.join('\n');
+  renderFoldCharts();
+  renderModelDetails(d);
+}
+
+function renderFoldCharts(){
+  const wrap = g('foldCharts'); wrap.innerHTML='';
+  const order = ['Ridge','ElasticNet','RandomForest','GradientBoosting','StackingEnsemble'];
+  order.forEach(name=>{
+    const data = foldData[name]; if(!data||!data.length) return;
+    const id = 'fc-'+name;
+    wrap.innerHTML += `<div class="fold-chart-wrap"><h4>${(MODEL_META[name]||{icon:''}).icon} ${name} — RMSE từng fold</h4><div class="fold-chartbox"><canvas id="${id}"></canvas></div></div>`;
+  });
+  setTimeout(()=>{
+    order.forEach(name=>{
+      const data = foldData[name]; if(!data||!data.length) return;
+      const el = g('fc-'+name); if(!el) return;
+      destroy('fold-'+name);
+      const m = MODEL_META[name]||{color:AMBER};
+      charts['fold-'+name] = new Chart(el,{type:'line',data:{
+        labels:data.map((_,i)=>`Fold ${i+1}`),
+        datasets:[{data,borderColor:m.color,borderWidth:1.5,pointRadius:2,
+          backgroundColor:`${m.color}20`,fill:true,tension:.3}]},
+        options:baseOpts({x:{ticks:{maxTicksLimit:10}},y:{beginAtZero:false}})});
+    });
+  },50);
+}
+
+function renderModelDetails(d){
+  const naive = d.models.find(r=>r.Model.startsWith('Naive'));
+  const bl = naive ? naive.OOS_RMSE : d.baseline_rmse;
+  const wrap = g('modelDetailContent'); wrap.innerHTML='';
+  ['Ridge','ElasticNet','RandomForest','GradientBoosting','StackingEnsemble'].forEach(name=>{
+    const info = MODEL_FULL[name]; if(!info) return;
+    const m = MODEL_META[name]||{icon:'●',color:AMBER};
+    const row = d.models.find(r=>r.Model===name);
+    const beat = row && row.OOS_RMSE < bl;
+    const rmseStr = row
+      ? `<span style="color:${beat?UP:DOWN}">RMSE ${row.OOS_RMSE}</span> · R² ${row.OOS_R2} · Dir ${row.Direction_Acc}`
+      : '(chưa có kết quả)';
+    wrap.innerHTML +=
+      `<div style="margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:24px">${m.icon}</span>
+          <div>
+            <div style="font-family:var(--disp);font-weight:700;font-size:15px;color:${m.color}">${info.full}</div>
+            <div style="font-size:11px;color:var(--muted)">${info.year}</div>
+          </div>
+          <div style="margin-left:auto;font-size:12px;text-align:right">${rmseStr}</div>
+        </div>
+        <div class="formula">${info.formula}</div>
+        <p>${info.desc}</p>
+        <p><strong>Điểm mạnh:</strong> ${info.strength}</p>
+        <p><strong>Hạn chế:</strong> ${info.weakness}</p>
+      </div>`;
+  });
+}
+
+/* ── Charts ──────────────────────────────────────────────── */
+Chart.register({id:'refLine',afterDraw(ch){
+  const r=ch.options.refLine; if(!r)return;
+  const {ctx,chartArea:{left,right},scales:{y}}=ch;
+  const yv=y.getPixelForValue(r.value); if(isNaN(yv))return;
+  ctx.save();ctx.strokeStyle=r.color;ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
+  ctx.beginPath();ctx.moveTo(left,yv);ctx.lineTo(right,yv);ctx.stroke();
+  ctx.fillStyle=r.color;ctx.font='10px monospace';ctx.fillText(r.label,left+6,yv-5);ctx.restore();
+}});
+
+function priceTickFmt(v){
+  const a = Math.abs(v);
+  if(a >= 1000) return (v/1000).toFixed(0)+'k';
+  if(a >= 10)   return v.toFixed(0);
+  if(a >= 1)    return v.toFixed(1);
+  return v.toFixed(3);
+}
+
+function drawPrice(s){
+  destroy('p');
+  const maxClose = s.length ? Math.max(...s.map(x=>x.close)) : 1;
+  const unit = maxClose < 500 ? ' (nghìn đ)' : ' (đ)';
+  g('priceHint').textContent = g('priceHint').textContent.replace(/ \(.*?\)$/,'') + unit;
+  charts.p=new Chart(g('priceChart'),{type:'line',
+    data:{labels:s.map(x=>x.date),datasets:[{data:s.map(x=>x.close),borderColor:AMBER,
+      borderWidth:1.5,pointRadius:0,fill:true,
+      backgroundColor:ctx=>{const g2=ctx.chart.ctx.createLinearGradient(0,0,0,300);
+        g2.addColorStop(0,'rgba(245,166,35,.18)');g2.addColorStop(1,'rgba(245,166,35,0)');return g2},tension:.1}]},
+    options:baseOpts({x:{ticks:{maxTicksLimit:8}},y:{ticks:{callback:priceTickFmt}}})});
+}
+
+function drawRmse(m, bl){
+  destroy('r');
+  const items=m.filter(x=>!x.Model.startsWith('Naive'));
+  const opt=baseOpts({x:{},y:{beginAtZero:false}});
+  opt.refLine={value:bl,color:AMBER,label:'baseline'};
+  charts.r=new Chart(g('rmseChart'),{type:'bar',
+    data:{labels:items.map(x=>labelModel(x.Model)),
+      datasets:[{data:items.map(x=>x.OOS_RMSE),
+        backgroundColor:items.map(x=>x.OOS_RMSE<bl?'rgba(63,185,80,.7)':'rgba(248,81,73,.55)'),
+        borderColor:items.map(x=>x.OOS_RMSE<bl?UP:DOWN),borderWidth:1,borderRadius:4}]},
+    options:opt});
+}
+
+function drawDir(m){
+  destroy('d');
+  const items=m.filter(x=>x.Direction_Acc>0);
+  const opt=baseOpts({x:{},y:{min:0.35,max:0.65}});
+  opt.refLine={value:0.5,color:MUTED,label:'0.50 (coin flip)'};
+  charts.d=new Chart(g('dirChart'),{type:'bar',
+    data:{labels:items.map(x=>labelModel(x.Model)),
+      datasets:[{data:items.map(x=>x.Direction_Acc),
+        backgroundColor:items.map(x=>x.Direction_Acc>0.55?'rgba(63,185,80,.7)':'rgba(107,118,134,.45)'),
+        borderColor:items.map(x=>x.Direction_Acc>0.55?UP:MUTED),borderWidth:1,borderRadius:4}]},
+    options:opt});
+}
+
+function drawScatter(s){
+  destroy('s');
+  const vals=s.flatMap(p=>[p.actual,p.pred]);
+  const mn=Math.min(...vals),mx=Math.max(...vals);
+  charts.s=new Chart(g('scatterChart'),{type:'scatter',
+    data:{datasets:[
+      {data:s.map(p=>({x:p.actual,y:p.pred})),backgroundColor:'rgba(88,166,255,.5)',pointRadius:3},
+      {type:'line',data:[{x:mn,y:mn},{x:mx,y:mx}],borderColor:MUTED,borderWidth:1,pointRadius:0,borderDash:[5,4]}]},
+    options:baseOpts({x:{title:{display:true,text:'Thực tế'}},y:{title:{display:true,text:'Dự đoán'}}})});
+}
+
+function drawTable(m){
+  const naive=m.find(x=>x.Model.startsWith('Naive'));
+  g('metricsTable').innerHTML=
+    '<tr><th>Mô hình</th><th>OOS RMSE</th><th>OOS R²</th><th>Hướng</th><th>N dự đoán</th></tr>'+
+    m.map(r=>{
+      const isBase=r.Model.startsWith('Naive');
+      const win=!isBase&&naive&&r.OOS_RMSE<naive.OOS_RMSE;
+      const tag=isBase?'<span class="tag base">baseline</span>':win?'<span class="tag win">beats</span>':'';
+      const icon=(MODEL_META[r.Model]||{icon:''}).icon;
+      return `<tr class="${isBase?'base':win?'win':''}">
+        <td>${icon} ${r.Model}${tag}</td>
+        <td>${r.OOS_RMSE}</td><td>${r.OOS_R2}</td>
+        <td>${isBase?'—':r.Direction_Acc}</td><td>${r.N_pred}</td></tr>`;
+    }).join('');
+}
+
+function baseOpts(scales){
+  const s={};
+  for(const k in scales){s[k]={grid:{color:'rgba(29,36,47,.6)'},...scales[k]}}
+  return {responsive:true,maintainAspectRatio:false,refLine:null,
+    plugins:{legend:{display:false},tooltip:{backgroundColor:'#0f1319',
+      borderColor:BORDER,borderWidth:1,titleColor:TEXT,bodyColor:TEXT}},
+    scales:s};
+}
+
+/* ── Accordion ───────────────────────────────────────────── */
+function toggleAcc(id){ g(id).classList.toggle('open'); }
+function jumpToModelDetail(name){
+  const acc=g('acc-models');
+  acc.classList.add('open');
+  acc.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+init();
+</script>
+</body>
+</html>

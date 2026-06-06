@@ -1,0 +1,7 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+scikit-learn>=1.4
+pandas>=2.0
+numpy>=1.26
+sse-starlette>=1.6.1
+vnstock>=3.0   ; python_version >= "3.10"
