@@ -16,6 +16,7 @@ Web app phân tích & dự báo cổ phiếu Việt Nam bằng học máy — ch
 6. [Cách đọc kết quả](#cách-đọc-kết-quả)
 7. [Kiến trúc kỹ thuật](#kiến-trúc-kỹ-thuật)
 8. [Lộ trình](#lộ-trình)
+9. [Câu hỏi thường gặp](#câu-hỏi-thường-gặp)
 
 ---
 
@@ -122,11 +123,36 @@ Quá trình này mất 2–5 phút tùy tốc độ mạng. Thư viện được
 - **macOS**: Double-click file `start.command` trong thư mục `stockml/`
 - **Windows**: Double-click file `start.bat` trong thư mục `stockml/`
 
-Cửa sổ terminal mở ra, server khởi động, sau đó mở trình duyệt và truy cập:
+Launcher sẽ tự động làm tất cả: tạo môi trường ảo, cài thư viện, khởi động server, mở trình duyệt. Lần đầu mất 3–5 phút do cài thư viện — **đừng tắt cửa sổ Terminal trong lúc đó**.
 
+> Trình duyệt mở tự động. Nếu không mở, vào thủ công: `http://localhost:8000`
+
+---
+
+### ⚠️ macOS: Cảnh báo bảo mật Gatekeeper (lần đầu chạy)
+
+macOS chặn các file script tải từ internet. Lần đầu double-click `start.command` sẽ thấy thông báo **"start.command cannot be opened because it is from an unidentified developer"**.
+
+**Cách mở lần đầu (chỉ cần làm 1 lần):**
+
+**Cách A — Nhanh nhất:**
+1. **Chuột phải** (hoặc Ctrl+Click) vào file `start.command`
+2. Chọn **"Open"** trong menu xuất hiện
+3. Trong hộp thoại cảnh báo, click **"Open"**
+4. Từ lần sau có thể double-click bình thường
+
+**Cách B — Qua System Settings:**
+1. Double-click `start.command` → nhận cảnh báo → click "OK"
+2. Mở **System Settings** (macOS 13+) hoặc **System Preferences** (macOS 12-)
+3. Vào **Privacy & Security** → cuộn xuống cuối
+4. Thấy dòng _"start.command was blocked"_ → click **"Open Anyway"**
+5. Nhập mật khẩu máy nếu được hỏi
+
+**Cách C — Terminal (1 lệnh):**
+```bash
+xattr -dr com.apple.quarantine ~/Desktop/hpg/files/stockml
 ```
-http://localhost:8000
-```
+Thay đường dẫn nếu bạn để thư mục `stockml` ở chỗ khác. Sau đó double-click bình thường.
 
 ### Cách thủ công (Terminal)
 
