@@ -1,5 +1,5 @@
 @echo off
-REM -- Trick tu run_all.bat: cmd /k dam bao cua so KHONG BAO GIO tu dong dong -----------
+REM -- Trick: cmd /k dam bao cua so KHONG BAO GIO tu dong dong ----------------
 REM    Lan dau (tu Explorer): _RELAUNCHED chua co -> relaunch trong cmd /k session
 REM    Lan hai (ben trong cmd /k): _RELAUNCHED=1 -> chay thang vao logic chinh
 if not defined _RELAUNCHED (
@@ -22,12 +22,11 @@ set PYTHON=
 set VENV=%~dp0venv
 
 :: ============================================================
-:: BUOC 1: Tim Python 3.10+
+:: BUOC 1: Tim Python 3.10+  (tu dong cai neu khong tim thay)
 :: ============================================================
 echo  [1/4] Tim Python 3.10+...
 
-REM 1a: Cac lenh co san trong PATH, uu tien ban moi nhat
-REM     Dung -c "exit()" de loc alias Microsoft Store (khong chay duoc)
+REM 1a: Cac lenh co san trong PATH
 for %%P in (python3.13 python3.12 python3.11 python3.10 python3 python) do (
     if "!PYTHON!" == "" (
         where %%P >nul 2>&1
@@ -38,7 +37,7 @@ for %%P in (python3.13 python3.12 python3.11 python3.10 python3 python) do (
     )
 )
 
-REM 1b: Duong dan cai dat mac dinh (AppData per-user va ProgramFiles system-wide)
+REM 1b: Duong dan cai dat mac dinh (chua them vao PATH sau khi cai moi)
 if "!PYTHON!" == "" (
     for %%D in (
         "%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
@@ -67,7 +66,7 @@ if "!PYTHON!" == "" (
     )
 )
 
-REM 1c: py.exe launcher -- lay duong dan python.exe thuc su tu py launcher
+REM 1c: py.exe launcher -- lay duong dan python.exe thuc su
 if "!PYTHON!" == "" (
     where py >nul 2>&1
     if not errorlevel 1 (
@@ -84,27 +83,127 @@ if "!PYTHON!" == "" (
     )
 )
 
+REM -- Tu dong cai Python 3.12 neu van chua tim thay --------------------------
+if "!PYTHON!" == "" (
+    echo        Chua tim thay -- dang tu dong cai Python 3.12...
+
+    REM Xac dinh kien truc CPU (amd64 hoac arm64)
+    set PY_ARCH=amd64
+    if "%PROCESSOR_ARCHITECTURE%"=="ARM64" set PY_ARCH=arm64
+
+    REM Cach A: winget (co san tren Windows 10 1709+ va Windows 11)
+    where winget >nul 2>&1
+    if not errorlevel 1 (
+        echo        Dung winget de cai Python 3.12...
+        winget install Python.Python.3.12 --silent --accept-source-agreements --accept-package-agreements
+        REM Quet lai cac duong dan biet (PATH chua cap nhat trong session nay)
+        for %%D in (
+            "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+            "%ProgramFiles%\Python312\python.exe"
+            "C:\Python312\python.exe"
+        ) do (
+            if "!PYTHON!" == "" (
+                if exist %%D (
+                    %%D -c "import sys;sys.exit(0 if sys.version_info>=(3,10) else 1)" >nul 2>&1
+                    if not errorlevel 1 set PYTHON=%%D
+                )
+            )
+        )
+        REM Thu py launcher sau khi winget cai xong
+        if "!PYTHON!" == "" (
+            where py >nul 2>&1
+            if not errorlevel 1 (
+                for /f "tokens=*" %%P in ('py -3.12 -c "import sys;print(sys.executable)" 2^>nul') do (
+                    if "!PYTHON!" == "" set PYTHON=%%P
+                )
+                if "!PYTHON!" == "" (
+                    for /f "tokens=*" %%P in ('py -3 -c "import sys;print(sys.executable)" 2^>nul') do (
+                        if "!PYTHON!" == "" set PYTHON=%%P
+                    )
+                )
+            )
+        )
+    ) else (
+        REM Cach B: Tai file cai dat .exe qua PowerShell
+        echo        winget khong co -- dang tai Python 3.12 tu python.org...
+        set PY_VER_DL=3.12.9
+        set PY_URL=https://www.python.org/ftp/python/!PY_VER_DL!/python-!PY_VER_DL!-!PY_ARCH!.exe
+        echo        URL: !PY_URL!
+        powershell -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;try{Invoke-WebRequest '!PY_URL!' -OutFile '%TEMP%\python_setup.exe' -UseBasicParsing;exit 0}catch{exit 1}"
+        REM Kiem tra file hop le: phai lon hon 5 MB (tranh luu trang loi HTML)
+        set DL_OK=0
+        if exist "%TEMP%\python_setup.exe" (
+            for %%S in ("%TEMP%\python_setup.exe") do (
+                if %%~zS GTR 5000000 set DL_OK=1
+            )
+        )
+        if "!DL_OK!" == "1" (
+            echo        Dang cai dat Python 3.12 ^(chi nguoi dung hien tai, khong can Admin^)...
+            "%TEMP%\python_setup.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0
+            del /f "%TEMP%\python_setup.exe" >nul 2>&1
+            for %%D in (
+                "%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+                "%ProgramFiles%\Python312\python.exe"
+                "C:\Python312\python.exe"
+            ) do (
+                if "!PYTHON!" == "" (
+                    if exist %%D (
+                        %%D -c "import sys;sys.exit(0 if sys.version_info>=(3,10) else 1)" >nul 2>&1
+                        if not errorlevel 1 set PYTHON=%%D
+                    )
+                )
+            )
+            if "!PYTHON!" == "" (
+                where py >nul 2>&1
+                if not errorlevel 1 (
+                    for /f "tokens=*" %%P in ('py -3.12 -c "import sys;print(sys.executable)" 2^>nul') do (
+                        if "!PYTHON!" == "" set PYTHON=%%P
+                    )
+                )
+            )
+        ) else (
+            if exist "%TEMP%\python_setup.exe" del /f "%TEMP%\python_setup.exe" >nul 2>&1
+            echo        Tai that bai hoac file khong hop le.
+        )
+    )
+)
+
 if "!PYTHON!" == "" (
     echo.
-    echo  [LOI] Khong tim thay Python 3.10 tro len.
+    echo  [LOI] Khong tim thay va khong the tu dong cai Python.
     echo.
-    echo  CACH CAI PYTHON:
+    echo  CAI PYTHON THU CONG:
     echo    1. Vao: https://www.python.org/downloads/
     echo    2. Click "Download Python 3.12.x"
     echo    3. Mo file .exe vua tai
-    echo    4. QUAN TRONG: Tick "Add Python to PATH" (o DUOI CUNG)
+    echo    4. QUAN TRONG: Tick "Add Python to PATH" ^(o DUOI CUNG^)
     echo    5. Bam Install Now -- sau do mo lai start.bat
     echo.
     echo  Neu da cai ma van loi:
     echo    Settings ^> Apps ^> Advanced app settings ^> App execution aliases
     echo    Tim python.exe va python3.exe -^> Tat OFF -^> Chay lai
     echo.
+    start "" "https://www.python.org/downloads/"
     goto :end
 )
 
 for /f "tokens=*" %%V in ('"!PYTHON!" --version 2>&1') do set PY_VER=%%V
 echo        OK - !PY_VER!
 echo.
+
+REM -- Kiem tra pip co san (Python 3.10+ thuong co san, kiem tra cho chac) ----
+"!PYTHON!" -m pip --version >nul 2>&1
+if errorlevel 1 (
+    echo        Bootstrapping pip...
+    "!PYTHON!" -m ensurepip --upgrade >nul 2>&1
+    if errorlevel 1 (
+        powershell -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;try{Invoke-WebRequest 'https://bootstrap.pypa.io/get-pip.py' -OutFile '%TEMP%\get-pip.py' -UseBasicParsing}catch{exit 1}"
+        if exist "%TEMP%\get-pip.py" (
+            "!PYTHON!" "%TEMP%\get-pip.py" --quiet
+            del /f "%TEMP%\get-pip.py" >nul 2>&1
+        )
+    )
+)
 
 :: ============================================================
 :: BUOC 2: Tao / kiem tra moi truong ao (venv)
@@ -125,7 +224,6 @@ if exist "!VENV!\" (
 echo        Dang tao ^(chi lam mot lan^)...
 "!PYTHON!" -m venv "!VENV!" 2>nul
 if errorlevel 1 (
-    REM venv module co the chua co, thu cai virtualenv
     echo        venv that bai, thu cai virtualenv...
     "!PYTHON!" -m pip install virtualenv --quiet
     "!PYTHON!" -m virtualenv "!VENV!"
@@ -134,8 +232,8 @@ if errorlevel 1 (
 if not exist "!VENV!\Scripts\python.exe" (
     echo.
     echo  [LOI] Khong the tao moi truong ao tai: !VENV!
-    echo  - Kiem tra o dia con trong (can ^>= 500 MB^)
-    echo  - Thu chay start.bat voi quyen Admin (chuot phai -^> Run as administrator)
+    echo  - Kiem tra o dia con trong ^(can ^>= 500 MB^)
+    echo  - Thu chay start.bat voi quyen Admin ^(chuot phai -^> Run as administrator^)
     echo.
     goto :end
 )
@@ -158,7 +256,7 @@ if not errorlevel 1 (
     goto :packages_ok
 )
 
-echo        Dang cai dat (lan dau mat 3-5 phut -- KHONG TAT cua so nay^)...
+echo        Dang cai dat ^(lan dau mat 3-5 phut -- KHONG TAT cua so nay^)...
 "!PYTHON!" -m pip install --upgrade pip --quiet >nul 2>&1
 "!PYTHON!" -m pip install -r requirements.txt
 if errorlevel 1 (
@@ -175,7 +273,7 @@ echo        OK - cai dat xong
 echo.
 
 :: ============================================================
-:: BUOC 4: Khoi dong server
+:: BUOC 4: Tim cong va khoi dong server
 :: ============================================================
 echo  [4/4] Tim cong va khoi dong server...
 
@@ -189,7 +287,7 @@ for %%P in (8000 8001 8002 8003 8004 8005 8006 8007 8008 8009) do (
 )
 
 if "!PORT!" == "" (
-    echo  [LOI] Khong tim duoc cong trong (8000-8009 deu ban).
+    echo  [LOI] Khong tim duoc cong trong ^(8000-8009 deu ban^).
     goto :end
 )
 
@@ -199,11 +297,10 @@ if not "!PORT!" == "8000" (
 
 echo        Khoi dong tren cong !PORT!...
 
-REM Khoi dong uvicorn trong background (start /B)
-REM /D dat working directory cho uvicorn (can thiet de import main:app)
+REM Khoi dong uvicorn trong background, /D dat working dir la backend/
 start "" /B /D "%~dp0backend" "!PYTHON!" -m uvicorn main:app --host 127.0.0.1 --port !PORT! --log-level warning --no-access-log
 
-REM Cho server san sang: kiem tra port mo, toi da 30 giay
+REM Cho server san sang: kiem tra port, toi da 30 giay
 set /a cnt=0
 :wait_loop
     timeout /t 1 /nobreak >nul
@@ -213,7 +310,7 @@ set /a cnt=0
     if !cnt! geq 30 (
         echo.
         echo  [LOI] Server khong khoi dong duoc sau 30 giay.
-        echo  Xem loi uvicorn phia tren (neu co).
+        echo  Xem loi uvicorn phia tren ^(neu co^).
         echo  Thu xoa thu muc venv\ roi chay lai.
         echo.
         goto :end

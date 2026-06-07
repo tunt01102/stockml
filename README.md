@@ -118,9 +118,9 @@ Quá trình này mất 2–5 phút tùy tốc độ mạng. Thư viện được
 
 ## Khởi động
 
-### Cách nhanh (double-click)
+### Cách nhanh
 
-- **macOS**: Double-click file `start.command` trong thư mục `stockml/`
+- **macOS**: Mở Terminal trong thư mục `stockml/`, gõ `bash start.sh`
 - **Windows**: Double-click file `start.bat` trong thư mục `stockml/`
 
 Launcher sẽ tự động làm tất cả: tạo môi trường ảo, cài thư viện, khởi động server, mở trình duyệt. Lần đầu mất 3–5 phút do cài thư viện — **đừng tắt cửa sổ Terminal trong lúc đó**.
@@ -131,28 +131,20 @@ Launcher sẽ tự động làm tất cả: tạo môi trường ảo, cài thư
 
 ### ⚠️ macOS: Cảnh báo bảo mật Gatekeeper (lần đầu chạy)
 
-macOS chặn các file script tải từ internet. Lần đầu double-click `start.command` sẽ thấy thông báo **"start.command cannot be opened because it is from an unidentified developer"**.
+macOS chặn các file script tải từ internet. Nếu thấy cảnh báo khi chạy lần đầu, dùng một trong hai cách sau:
 
-**Cách mở lần đầu (chỉ cần làm 1 lần):**
-
-**Cách A — Nhanh nhất:**
-1. **Chuột phải** (hoặc Ctrl+Click) vào file `start.command`
-2. Chọn **"Open"** trong menu xuất hiện
-3. Trong hộp thoại cảnh báo, click **"Open"**
-4. Từ lần sau có thể double-click bình thường
-
-**Cách B — Qua System Settings:**
-1. Double-click `start.command` → nhận cảnh báo → click "OK"
-2. Mở **System Settings** (macOS 13+) hoặc **System Preferences** (macOS 12-)
-3. Vào **Privacy & Security** → cuộn xuống cuối
-4. Thấy dòng _"start.command was blocked"_ → click **"Open Anyway"**
-5. Nhập mật khẩu máy nếu được hỏi
-
-**Cách C — Terminal (1 lệnh):**
+**Cách A — Terminal (1 lệnh, nhanh nhất):**
 ```bash
 xattr -dr com.apple.quarantine ~/Desktop/hpg/files/stockml
+bash ~/Desktop/hpg/files/stockml/start.sh
 ```
-Thay đường dẫn nếu bạn để thư mục `stockml` ở chỗ khác. Sau đó double-click bình thường.
+Thay đường dẫn nếu bạn để thư mục `stockml` ở chỗ khác.
+
+**Cách B — Qua System Settings:**
+1. Chạy `bash start.sh` → nhận cảnh báo
+2. Mở **System Settings** → **Privacy & Security** → cuộn xuống cuối
+3. Thấy dòng _"start.sh was blocked"_ → click **"Open Anyway"**
+4. Nhập mật khẩu máy nếu được hỏi
 
 ### Cách thủ công (Terminal)
 
@@ -247,7 +239,7 @@ stockml/
 │   └── index.html               # Dashboard SPA (Chart.js, SSE client)
 ├── cache/                        # Parquet cache tự động (gitignore)
 ├── requirements.txt
-├── start.command                 # Launcher macOS
+├── start.sh                      # Launcher macOS/Linux
 └── start.bat                     # Launcher Windows
 ```
 
