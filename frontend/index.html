@@ -48,7 +48,7 @@ h1 .dot{color:var(--amber)}
 .tab-close:hover{color:var(--red)}
 
 /* ── Controls ─────────────────────────────────────────────── */
-.controls{display:grid;grid-template-columns:1.2fr .8fr .8fr .6fr .7fr auto;gap:12px;
+.controls{display:grid;grid-template-columns:.85fr 1fr 1fr .5fr .75fr .85fr auto;gap:12px;
   background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
 label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
 input,select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
@@ -238,13 +238,16 @@ tr.win td{color:var(--green)}tr.base td{color:var(--amber)}
   transition:opacity .5s;pointer-events:none}
 
 /* ── Responsive ───────────────────────────────────────────── */
-@media(max-width:960px){.model-cards{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:960px){
+  .model-cards{grid-template-columns:repeat(3,1fr)}
+  .controls{grid-template-columns:1fr 1fr 1fr}
+  button.run{grid-column:1/-1}
+  #targetMode,#priceType{grid-column:1/-1}
+}
 @media(max-width:700px){
   .controls{grid-template-columns:1fr 1fr}
   .grid{grid-template-columns:1fr}
-  button.run{grid-column:1/-1}
   .model-cards{grid-template-columns:repeat(2,1fr)}
-  #targetMode,#priceType{grid-column:1/-1}
 }
 </style>
 </head>
@@ -266,10 +269,10 @@ tr.win td{color:var(--green)}tr.base td{color:var(--amber)}
 
   <!-- ── Controls ─────────────────────────────────────────── -->
   <div class="controls">
-    <div><label>Mã chứng khoán</label><input id="symbol" value="HPG" placeholder="VD: HPG, FPT, VNM…" /></div>
+    <div><label>Mã CK</label><input id="symbol" value="HPG" placeholder="VD: HPG, FPT, VNM…" /></div>
     <div><label>Từ ngày</label><input type="date" id="start" value="2020-01-01" /></div>
     <div><label>Đến ngày</label><input type="date" id="end" value="2026-05-31" /></div>
-    <div><label>Chân trời (phiên)</label>
+    <div><label>Chân trời</label>
       <select id="horizon"><option>5</option><option>10</option><option>20</option></select></div>
     <div><label>Mục tiêu</label>
       <select id="targetMode">
