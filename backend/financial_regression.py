@@ -26,7 +26,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import (
@@ -165,7 +165,39 @@ MODEL_INFO: Dict[str, dict] = {
 
 
 # ----------------------------------------------------------------------
-# 3. FACTORY — tạo các ModelSpec chuẩn, hyperparameter tập trung 1 chỗ
+# 3. GARCH BASELINE — sklearn-compatible wrapper cho volatility mode
+# ----------------------------------------------------------------------
+class GarchBaseline(BaseEstimator, RegressorMixin):
+    """Baseline cho volatility mode: dự đoán vol = sqrt(garch_forecast_t * horizon).
+
+    Dùng quy tắc sqrt-of-time để scale 1-day GARCH variance sang h-day vol.
+    Không có tham số học — fit() là no-op.
+    """
+
+    def __init__(self, horizon: int = 5):
+        self.horizon = horizon
+
+    def fit(self, X, y=None):
+        # Set sklearn-required fitted attributes so check_is_fitted() passes
+        self.n_features_in_ = X.shape[1] if hasattr(X, "shape") else len(X.columns)
+        self.is_fitted_ = True
+        return self
+
+    def predict(self, X):
+        if hasattr(X, "columns") and "garch_forecast_t" in X.columns:
+            var = X["garch_forecast_t"].values
+        elif hasattr(X, "__getitem__") and "garch_forecast_t" in X:
+            var = X["garch_forecast_t"].values
+        else:
+            # GARCH features unavailable — fallback to rolling vol proxy
+            col = "vol_10d" if (hasattr(X, "columns") and "vol_10d" in X.columns) else None
+            fallback = X[col].values if col else np.full(len(X), 0.01)
+            return fallback * np.sqrt(self.horizon)
+        return np.sqrt(np.maximum(0.0, var) * self.horizon)
+
+
+# ----------------------------------------------------------------------
+# 4. FACTORY — tạo các ModelSpec chuẩn, hyperparameter tập trung 1 chỗ
 # ----------------------------------------------------------------------
 class ModelFactory:
     """Factory tạo 5 lớp thuật toán hồi quy chuyên dụng."""
@@ -255,6 +287,15 @@ class ModelFactory:
         ]
 
     @classmethod
+    def garch_baseline(cls, horizon: int = 5) -> ModelSpec:
+        """GARCH baseline cho volatility mode: sqrt(garch_forecast_t * horizon)."""
+        return ModelSpec(
+            name="GARCH Baseline",
+            estimator=GarchBaseline(horizon=horizon),
+            needs_scaling=False,
+        )
+
+    @classmethod
     def fast_default(cls) -> List[ModelSpec]:
         """Preset nhẹ cho web (ít cây hơn) -> phản hồi nhanh, kết luận không đổi."""
         return [
@@ -267,7 +308,7 @@ class ModelFactory:
 
 
 # ----------------------------------------------------------------------
-# 4. MODEL WRAPPER — đóng gói (StandardScaler -> estimator) thành Pipeline
+# 5. MODEL WRAPPER — đóng gói (StandardScaler -> estimator) thành Pipeline
 # ----------------------------------------------------------------------
 class RegressionModel:
     """Bọc 1 ModelSpec thành sklearn Pipeline.

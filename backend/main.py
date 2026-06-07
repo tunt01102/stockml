@@ -41,6 +41,7 @@ class AnalyzeRequest(BaseModel):
     start: str = "2020-01-01"
     end: str = "2026-05-31"
     horizon: int = Field(5, ge=1, le=20)
+    mode: str = Field("return", pattern="^(return|volatility)$")
 
 
 @app.get("/api/health")
@@ -67,7 +68,7 @@ def analyze(req: AnalyzeRequest):
     if not req.symbol.strip():
         raise HTTPException(400, "Thiếu mã chứng khoán.")
     try:
-        return service.analyze(req.symbol.strip(), req.start, req.end, req.horizon)
+        return service.analyze(req.symbol.strip(), req.start, req.end, req.horizon, req.mode)
     except ValueError as e:
         raise HTTPException(422, str(e))
     except Exception as e:
@@ -80,6 +81,7 @@ async def analyze_stream(
     start: str = Query("2020-01-01"),
     end: str = Query("2026-05-31"),
     horizon: int = Query(5, ge=1, le=20),
+    mode: str = Query("return", pattern="^(return|volatility)$"),
 ):
     """Phân tích realtime — trả SSE stream với events theo từng giai đoạn ML."""
     if not symbol.strip():
@@ -87,7 +89,7 @@ async def analyze_stream(
 
     async def event_generator():
         loop = asyncio.get_event_loop()
-        sync_gen = service.analyze_stream(symbol.strip(), start, end, horizon)
+        sync_gen = service.analyze_stream(symbol.strip(), start, end, horizon, mode)
         # Dùng sentinel thay vì try/except StopIteration:
         # Python 3.7+ (PEP 479) biến StopIteration trong coroutine thành RuntimeError,
         # nên không thể catch được sau run_in_executor. next(gen, default) an toàn hơn.

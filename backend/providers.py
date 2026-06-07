@@ -34,6 +34,12 @@ class VnstockProvider(DataProvider):
     name = "vnstock"
 
     def fetch(self, symbol: str, start: str, end: str) -> pd.DataFrame:
+        import data_cache
+
+        cached = data_cache.load(symbol, start, end)
+        if cached is not None:
+            return cached
+
         from vnstock.api.quote import Quote  # vnstock >= 4.x API mới
         q = Quote(symbol=symbol.upper(), source="VCI")
         raw = q.history(start=start, end=end, interval="1D")
@@ -41,7 +47,14 @@ class VnstockProvider(DataProvider):
         raw.columns = [c.lower() for c in raw.columns]
         df = raw[OHLCV].copy()
         df["date"] = pd.to_datetime(df["date"])
-        return df.sort_values("date").reset_index(drop=True)
+        df = df.sort_values("date").reset_index(drop=True)
+
+        try:
+            data_cache.save(symbol, start, end, df)
+        except Exception:
+            pass  # non-fatal: cache write failure doesn't break the pipeline
+
+        return df
 
 
 class SyntheticProvider(DataProvider):

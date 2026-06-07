@@ -48,7 +48,7 @@ h1 .dot{color:var(--amber)}
 .tab-close:hover{color:var(--red)}
 
 /* ── Controls ─────────────────────────────────────────────── */
-.controls{display:grid;grid-template-columns:1.4fr .9fr .9fr .7fr auto;gap:12px;
+.controls{display:grid;grid-template-columns:1.2fr .8fr .8fr .6fr .7fr auto;gap:12px;
   background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px}
 label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
 input,select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
@@ -244,6 +244,7 @@ tr.win td{color:var(--green)}tr.base td{color:var(--amber)}
   .grid{grid-template-columns:1fr}
   button.run{grid-column:1/-1}
   .model-cards{grid-template-columns:repeat(2,1fr)}
+  #targetMode{grid-column:1/-1}
 }
 </style>
 </head>
@@ -270,6 +271,11 @@ tr.win td{color:var(--green)}tr.base td{color:var(--amber)}
     <div><label>Đến ngày</label><input type="date" id="end" value="2026-05-31" /></div>
     <div><label>Chân trời (phiên)</label>
       <select id="horizon"><option>5</option><option>10</option><option>20</option></select></div>
+    <div><label>Mục tiêu</label>
+      <select id="targetMode">
+        <option value="return">Lợi suất</option>
+        <option value="volatility">Biến động</option>
+      </select></div>
     <button class="run" id="runBtn" onclick="run()">Phân tích</button>
   </div>
   <div class="chips" id="chips"></div>
@@ -279,7 +285,7 @@ tr.win td{color:var(--green)}tr.base td{color:var(--amber)}
 
   <!-- ── Verdict ───────────────────────────────────────────── -->
   <div class="verdict" id="verdict">
-    <div class="q">Câu hỏi trung tâm: Mô hình ML có đánh bại baseline "random walk" không?</div>
+    <div class="q" id="verdictQ">Câu hỏi trung tâm: Mô hình ML có đánh bại baseline "random walk" không?</div>
     <div class="a" id="verdictA"></div>
     <p id="verdictP"></p>
     <div class="meta" id="metaRow"></div>
@@ -518,13 +524,18 @@ tr.win td{color:var(--green)}tr.base td{color:var(--amber)}
         <span class="mstg-det" id="mdetValidate"></span>
       </div>
       <div class="mstg">
+        <span class="mstg-icon" id="icnFundamental">○</span>
+        <span>③ Dữ liệu cơ bản</span>
+        <span class="mstg-det" id="mdetFundamental"></span>
+      </div>
+      <div class="mstg">
         <span class="mstg-icon" id="icnFeatures">○</span>
-        <span>③ Feature Engineering</span>
+        <span>④ Feature Engineering</span>
         <span class="mstg-det" id="mdetFeatures"></span>
       </div>
       <div class="mstg">
         <span class="mstg-icon" id="icnTraining">○</span>
-        <span>④ Huấn luyện &amp; Đánh giá</span>
+        <span>⑤ Huấn luyện &amp; Đánh giá</span>
         <span class="mstg-det" id="mdetTraining"></span>
       </div>
     </div>
@@ -555,7 +566,9 @@ const MODEL_META = {
   RandomForest:{icon:'🌲',color:'#3fb950',algo:'Bagging + Random Subspace',params:'120 trees, min_leaf=5'},
   GradientBoosting:{icon:'🚀',color:'#f85149',algo:'Gradient Boosting (Stochastic)',params:'120 trees, lr=0.05, depth=3'},
   StackingEnsemble:{icon:'🧩',color:'#a371f7',algo:'Meta-Learning',params:'EN + RF + GBR → Ridge'},
+  'GARCH Baseline':{icon:'📊',color:'#6b7686',algo:'GARCH(1,1) Volatility Forecast',params:'sqrt(σ²·h)'},
 };
+function isBaselineModel(name){ return name.startsWith('Naive')||name==='GARCH Baseline'; }
 const MODEL_FULL = {
   Ridge:{full:'Ridge Regression (L2)',year:'1970 — Hoerl & Kennard',
     formula:'min ½·‖Xw−y‖² + α·‖w‖²',
@@ -590,7 +603,7 @@ let totalFolds = 0, numModels = 0;
 let _modelOrder = [];
 const foldData = {};
 let analysisComplete = false;
-let currentSym = '', currentStart = '', currentEnd = '', currentHorizon = 5;
+let currentSym = '', currentStart = '', currentEnd = '', currentHorizon = 5, currentMode = 'return';
 
 /* ── Tab state ───────────────────────────────────────────── */
 const tabStore = {};
@@ -598,14 +611,14 @@ const tabOrder = [];
 let activeTabKey = null;
 const MAX_TABS = 10;
 
-function getTabKey(sym, start, end, horizon){
-  return `${sym.toUpperCase()}|${start}|${end}|${horizon}`;
+function getTabKey(sym, start, end, horizon, mode){
+  return `${sym.toUpperCase()}|${start}|${end}|${horizon}|${mode||'return'}`;
 }
 
 function createTab(key, meta){
   tabStore[key] = {
     symbol: meta.symbol, start: meta.start,
-    end: meta.end, horizon: +meta.horizon,
+    end: meta.end, horizon: +meta.horizon, mode: meta.mode||'return',
     result: null, foldData: {}
   };
   tabOrder.push(key);
@@ -630,7 +643,8 @@ function renderTabBar(){
     const sym = document.createElement('span');
     sym.className = 'tab-sym'; sym.textContent = entry.symbol;
     const meta = document.createElement('span');
-    meta.className = 'tab-meta'; meta.textContent = `${s}–${e} h${entry.horizon}`;
+    const modeLabel = entry.mode==='volatility'?' vol':'';
+    meta.className = 'tab-meta'; meta.textContent = `${s}–${e} h${entry.horizon}${modeLabel}`;
     const btn = document.createElement('button');
     btn.className = 'tab-close'; btn.textContent = '×';
     btn.onclick = (ev)=>{ ev.stopPropagation(); closeTab(key); };
@@ -648,6 +662,7 @@ function switchTab(key){
   g('start').value = entry.start;
   g('end').value = entry.end;
   g('horizon').value = String(entry.horizon);
+  g('targetMode').value = entry.mode || 'return';
   if(entry.result){
     hide('err'); hide('empty');
     Object.keys(foldData).forEach(k=>delete foldData[k]);
@@ -731,8 +746,8 @@ function openModal(sym){
   g('timerRemaining').textContent = 'Còn lại: --:--';
   g('modalYearChips').innerHTML = '';
   g('modalModelRows').innerHTML = '';
-  ['icnFetch','icnValidate','icnFeatures','icnTraining'].forEach(id=>setIcon(id,'○',false,false));
-  ['mdetFetch','mdetValidate','mdetFeatures','mdetTraining'].forEach(id=>{const el=g(id);if(el)el.textContent='';});
+  ['icnFetch','icnValidate','icnFundamental','icnFeatures','icnTraining'].forEach(id=>setIcon(id,'○',false,false));
+  ['mdetFetch','mdetValidate','mdetFundamental','mdetFeatures','mdetTraining'].forEach(id=>{const el=g(id);if(el)el.textContent='';});
   g('modalOverlay').style.display = 'flex';
   startTimer(estimateSeconds(currentStart, currentEnd));
 }
@@ -784,14 +799,15 @@ async function run(){
   const start = g('start').value;
   const end = g('end').value;
   const horizon = +g('horizon').value;
-  const key = getTabKey(sym, start, end, horizon);
+  const mode = g('targetMode').value || 'return';
+  const key = getTabKey(sym, start, end, horizon, mode);
 
   // Cache hit — switch immediately without re-fetching
   if(tabStore[key]){ switchTab(key); return; }
 
   if(activeES){ activeES.close(); activeES = null; }
 
-  currentSym = sym; currentStart = start; currentEnd = end; currentHorizon = horizon;
+  currentSym = sym; currentStart = start; currentEnd = end; currentHorizon = horizon; currentMode = mode;
 
   const btn = g('runBtn'); btn.disabled = true;
   hide('results'); hide('verdict'); hide('err'); hide('empty');
@@ -804,11 +820,11 @@ async function run(){
 
   openModal(sym);
 
-  const params = new URLSearchParams({symbol: sym, start, end, horizon});
+  const params = new URLSearchParams({symbol: sym, start, end, horizon, mode});
   const es = new EventSource(`/api/analyze-stream?${params}`);
   activeES = es;
 
-  es.onmessage = (e)=>{ try{ handleEvent(JSON.parse(e.data)); }catch(_){} };
+  es.onmessage = (e)=>{ try{ handleEvent(JSON.parse(e.data)); }catch(err){ console.error('SSE handle error:', err, e.data?.slice?.(0,200)); } };
 
   es.onerror = ()=>{
     if(analysisComplete){ es.close(); activeES = null; return; }
@@ -825,6 +841,8 @@ function handleEvent(ev){
     case 'fetch_start':    onFetchStart(ev); break;
     case 'fetch_year':     onFetchYear(ev); break;
     case 'validate':       onValidate(ev); break;
+    case 'fundamental_start': onFundStart(); break;
+    case 'fundamental_done':  onFundDone(ev); break;
     case 'features_start': onFeatStart(); break;
     case 'features_done':  onFeatDone(ev); break;
     case 'training_start': onTrainingStart(ev); break;
@@ -863,9 +881,22 @@ function onValidate(ev){
   updateModalProgress(20, 'Kiểm tra dữ liệu hoàn tất');
 }
 
+function onFundStart(){
+  setIcon('icnFundamental','⟳',true,false);
+  updateModalProgress(21, 'Tải P/E, P/B và giá nguyên liệu…');
+}
+
+function onFundDone(ev){
+  const cols = ev.cols||[];
+  const det = g('mdetFundamental');
+  if(det) det.textContent = cols.length ? cols.join(', ') : 'không khả dụng';
+  setIcon('icnFundamental', cols.length ? '✓' : '—', false, true);
+  updateModalProgress(23, cols.length ? `Fundamental: ${cols.length} cột` : 'Fundamental: bỏ qua');
+}
+
 function onFeatStart(){
   setIcon('icnFeatures','⟳',true,false);
-  updateModalProgress(22, 'Tính 15 đặc trưng kỹ thuật…');
+  updateModalProgress(24, 'Tính đặc trưng kỹ thuật…');
 }
 
 function onFeatDone(ev){
@@ -936,10 +967,10 @@ function onComplete(ev){
   updateModalProgress(100, 'Hoàn tất!');
   lastResult = ev.result;
 
-  const key = getTabKey(currentSym, currentStart, currentEnd, currentHorizon);
+  const key = getTabKey(currentSym, currentStart, currentEnd, currentHorizon, currentMode);
   const isNew = !tabStore[key];
   if(isNew && tabOrder.length >= MAX_TABS) evictOldestTab();
-  if(isNew) createTab(key, {symbol:currentSym, start:currentStart, end:currentEnd, horizon:currentHorizon});
+  if(isNew) createTab(key, {symbol:currentSym, start:currentStart, end:currentEnd, horizon:currentHorizon, mode:currentMode});
   saveToTab(key, ev.result, Object.assign({}, ...Object.keys(foldData).map(k=>({[k]:[...foldData[k]]}))));
   activeTabKey = key;
   renderTabBar();
@@ -958,17 +989,28 @@ function onError(ev){
 
 /* ── Render results ──────────────────────────────────────── */
 function render(d){
+  const isVol = d.mode === 'volatility';
   const v = g('verdict');
   v.className = 'verdict '+(d.beats_baseline?'yes':'no');
+  g('verdictQ').textContent = isVol
+    ? 'Câu hỏi: Mô hình ML có dự báo biến động tốt hơn GARCH baseline không?'
+    : 'Câu hỏi trung tâm: Mô hình ML có đánh bại baseline "random walk" không?';
   g('verdictA').textContent = d.beats_baseline ? 'CÓ — cần soi kỹ leakage' : 'KHÔNG';
   g('verdictP').textContent = d.beats_baseline
-    ? 'Một mô hình có RMSE thấp hơn baseline. Trên cổ phiếu đơn điều này hiếm — hãy kiểm tra rò rỉ dữ liệu trước khi tin.'
-    : 'Không mô hình nào đánh bại random walk — đúng với thị trường hiệu quả dạng yếu. Đây là kết quả hợp lệ.';
+    ? (isVol
+        ? 'Một mô hình dự báo biến động tốt hơn GARCH. Kiểm tra xem có look-ahead trong GARCH features không.'
+        : 'Một mô hình có RMSE thấp hơn baseline. Trên cổ phiếu đơn điều này hiếm — hãy kiểm tra rò rỉ dữ liệu trước khi tin.')
+    : (isVol
+        ? 'Không mô hình ML nào vượt qua GARCH — đây là kết quả điển hình: GARCH rất mạnh trong dự báo biến động.'
+        : 'Không mô hình nào đánh bại random walk — đúng với thị trường hiệu quả dạng yếu. Đây là kết quả hợp lệ.');
   const srcReal = d.source==='vnstock';
+  const targetLabel = isVol ? 'σ biến động mục tiêu' : 'σ lợi suất mục tiêu';
+  const modeLabel = isVol ? 'Biến động (vol)' : 'Lợi suất (return)';
   g('metaRow').innerHTML =
     `<span>Mã: <b>${d.symbol}</b></span><span>Nguồn: <b class="${srcReal?'src-real':'src-syn'}">${d.source}</b></span>`+
     `<span>Số phiên: <b>${d.n_obs}</b></span><span>Chân trời: <b>${d.horizon} phiên</b></span>`+
-    `<span>σ lợi suất mục tiêu: <b>${d.target_std}</b></span>`;
+    `<span>Mục tiêu: <b>${modeLabel}</b></span>`+
+    `<span>${targetLabel}: <b>${d.target_std}</b></span>`;
   show('verdict');
   renderModelCards(d);
   g('priceHint').textContent = `${d.date_range[0]} → ${d.date_range[1]}`; // unit appended by drawPrice
@@ -984,9 +1026,9 @@ function render(d){
 }
 
 function renderModelCards(d){
-  const naive = d.models.find(r=>r.Model.startsWith('Naive'));
-  const bl = naive ? naive.OOS_RMSE : d.baseline_rmse;
-  const ml = d.models.filter(r=>!r.Model.startsWith('Naive'));
+  const baseRow = d.models.find(r=>isBaselineModel(r.Model));
+  const bl = baseRow ? baseRow.OOS_RMSE : d.baseline_rmse;
+  const ml = d.models.filter(r=>!isBaselineModel(r.Model));
   const wrap = g('modelCards'); wrap.innerHTML='';
   ml.forEach(r=>{
     const m = MODEL_META[r.Model]||{icon:'●',color:AMBER,algo:r.Model,params:''};
@@ -1046,8 +1088,8 @@ function renderFoldCharts(){
 }
 
 function renderModelDetails(d){
-  const naive = d.models.find(r=>r.Model.startsWith('Naive'));
-  const bl = naive ? naive.OOS_RMSE : d.baseline_rmse;
+  const baseRow = d.models.find(r=>isBaselineModel(r.Model));
+  const bl = baseRow ? baseRow.OOS_RMSE : d.baseline_rmse;
   const wrap = g('modelDetailContent'); wrap.innerHTML='';
   ['Ridge','ElasticNet','RandomForest','GradientBoosting','StackingEnsemble'].forEach(name=>{
     const info = MODEL_FULL[name]; if(!info) return;
@@ -1108,7 +1150,7 @@ function drawPrice(s){
 
 function drawRmse(m, bl){
   destroy('r');
-  const items=m.filter(x=>!x.Model.startsWith('Naive'));
+  const items=m.filter(x=>!isBaselineModel(x.Model));
   const opt=baseOpts({x:{},y:{beginAtZero:false}});
   opt.refLine={value:bl,color:AMBER,label:'baseline'};
   charts.r=new Chart(g('rmseChart'),{type:'bar',
@@ -1144,12 +1186,12 @@ function drawScatter(s){
 }
 
 function drawTable(m){
-  const naive=m.find(x=>x.Model.startsWith('Naive'));
+  const baseRow=m.find(x=>isBaselineModel(x.Model));
   g('metricsTable').innerHTML=
     '<tr><th>Mô hình</th><th>OOS RMSE</th><th>OOS R²</th><th>Hướng</th><th>N dự đoán</th></tr>'+
     m.map(r=>{
-      const isBase=r.Model.startsWith('Naive');
-      const win=!isBase&&naive&&r.OOS_RMSE<naive.OOS_RMSE;
+      const isBase=isBaselineModel(r.Model);
+      const win=!isBase&&baseRow&&r.OOS_RMSE<baseRow.OOS_RMSE;
       const tag=isBase?'<span class="tag base">baseline</span>':win?'<span class="tag win">beats</span>':'';
       const icon=(MODEL_META[r.Model]||{icon:''}).icon;
       return `<tr class="${isBase?'base':win?'win':''}">
