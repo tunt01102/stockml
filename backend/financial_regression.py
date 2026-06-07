@@ -29,6 +29,15 @@ import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
+
+
+def _clip_5sigma(X: np.ndarray) -> np.ndarray:
+    """Clip scaled values to ±5σ — prevents matmul overflow in Ridge/ElasticNet.
+
+    Defined at module level (not lambda) so it is picklable on Windows
+    when joblib uses the 'spawn' multiprocessing context.
+    """
+    return np.clip(X, -5, 5)
 from sklearn.model_selection import (
     train_test_split,
     cross_val_score,
@@ -325,7 +334,7 @@ class RegressionModel:
             steps.append(("scaler", StandardScaler()))
             # Clip extreme scaled values (±5σ) — commodity/GARCH features can spike
             # far beyond training distribution in test folds, causing matmul overflow.
-            steps.append(("clipper", FunctionTransformer(lambda X: np.clip(X, -5, 5))))
+            steps.append(("clipper", FunctionTransformer(_clip_5sigma)))
         steps.append(("model", spec.estimator))
         self.pipeline: Pipeline = Pipeline(steps)
 

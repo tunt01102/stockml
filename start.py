@@ -175,22 +175,31 @@ def find_free_port(start: int = 8000, n: int = 10) -> int:
     raise RuntimeError(f"Khong tim duoc port trong ({start}-{start + n - 1}).")
 
 
-# ── Step 4: Start uvicorn ──────────────────────────────────────────────────
+# ── Step 4: Start uvicorn (stderr -> log file, stdout -> console) ──────────
+LOG_FILE = ROOT / "server.log"
+
 def start_server(port: int) -> subprocess.Popen:
     cmd = [
         str(VENV_UVICORN), "main:app",
         "--host", "127.0.0.1",
         "--port", str(port),
+        "--log-level", "warning",
         "--no-access-log",
     ]
-    return subprocess.Popen(cmd, cwd=str(BACKEND))
+    log = open(LOG_FILE, "w", encoding="utf-8", errors="replace")
+    # stderr -> file (capture crash tracebacks); stdout -> inherited (console)
+    return subprocess.Popen(cmd, cwd=str(BACKEND), stderr=log)
 
 
-# ── Step 4: Poll until server ready ───────────────────────────────────────
-def wait_for_server(port: int, timeout: int = 60) -> bool:
+# ── Step 4: Poll until server ready, detect crash early ───────────────────
+def wait_for_server(port: int, proc: subprocess.Popen, timeout: int = 30) -> bool:
     url = f"http://127.0.0.1:{port}/api/health"
     print("  [cho server khoi dong", end="", flush=True)
     for _ in range(timeout):
+        # Detect crash immediately (no need to wait the full timeout)
+        if proc.poll() is not None:
+            print("] CRASH!", flush=True)
+            return False
         try:
             urllib.request.urlopen(url, timeout=1)
             print("] san sang!", flush=True)
@@ -202,16 +211,40 @@ def wait_for_server(port: int, timeout: int = 60) -> bool:
     return False
 
 
+def _open_browser(url: str) -> None:
+    """Mở trình duyệt — dùng 'start' trên Windows để tránh lỗi quyền."""
+    if WIN:
+        # os.system("start") gọi trực tiếp shell Windows, tin cậy hơn webbrowser
+        os.system(f'start "" "{url}"')
+    else:
+        webbrowser.open(url)
+
+
+def _show_server_log() -> None:
+    """In 30 dòng cuối của server.log nếu có nội dung."""
+    if not LOG_FILE.exists():
+        return
+    try:
+        text = LOG_FILE.read_text(encoding="utf-8", errors="replace").strip()
+    except Exception:
+        return
+    if not text:
+        return
+    lines = text.splitlines()[-30:]
+    print()
+    print("  --- Chi tiet loi server (server.log) ---")
+    for line in lines:
+        print(f"  {line}")
+    print("  ----------------------------------------")
+
+
 # ── Utility: keep terminal open on error ──────────────────────────────────
 def _pause_and_exit(code: int = 1) -> None:
     print()
     _hr()
     if WIN:
-        print("  Nhan Enter de dong cua so nay...")
-        try:
-            input()
-        except Exception:
-            pass
+        print("  Nhan phim bat ky de dong cua so nay...")
+        os.system("pause >nul")  # cmd built-in: reliable on all Windows setups
     sys.exit(code)
 
 
@@ -240,9 +273,10 @@ def main() -> None:
     inf(f"Dang khoi dong server...")
     proc = start_server(port)
 
-    if not wait_for_server(port):
-        err("Server khong phan hoi sau 60 giay.")
-        err("Thu xoa thu muc 'venv' roi chay lai de cai lai thu vien.")
+    if not wait_for_server(port, proc):
+        err("Server khong khoi dong duoc.")
+        _show_server_log()
+        err("Xem loi o phia tren. Thu xoa thu muc 'venv' roi chay lai.")
         proc.terminate()
         _pause_and_exit()
 
@@ -251,12 +285,13 @@ def main() -> None:
     print()
     print("  +--------------------------------------------------+")
     print(f"  |  Dia chi :  {url:<38}|")
-    print("  |  De dung  :  dong cua so Terminal nay (Ctrl+C)   |")
+    print("  |  !! GIU CUA SO NAY MO de server tiep tuc chay!! |")
+    print("  |  Nhan Ctrl+C trong cua so nay de dung server.   |")
     print("  +--------------------------------------------------+")
     print()
 
-    inf("Dang mo trinh duyet tu dong...")
-    webbrowser.open(url)
+    inf("Dang mo trinh duyet...")
+    _open_browser(url)
 
     if sys.platform == "darwin":
         warn("macOS: Neu bi canh bao bao mat -> right-click start.command -> Open")
