@@ -244,7 +244,7 @@ tr.win td{color:var(--green)}tr.base td{color:var(--amber)}
   .grid{grid-template-columns:1fr}
   button.run{grid-column:1/-1}
   .model-cards{grid-template-columns:repeat(2,1fr)}
-  #targetMode{grid-column:1/-1}
+  #targetMode,#priceType{grid-column:1/-1}
 }
 </style>
 </head>
@@ -275,6 +275,12 @@ tr.win td{color:var(--green)}tr.base td{color:var(--amber)}
       <select id="targetMode">
         <option value="return">Lợi suất</option>
         <option value="volatility">Biến động</option>
+      </select></div>
+    <div><label>Giá cơ sở</label>
+      <select id="priceType">
+        <option value="close">Đóng cửa (Close)</option>
+        <option value="open">Mở cửa (Open)</option>
+        <option value="typical">Trung bình (H+L+C)/3</option>
       </select></div>
     <button class="run" id="runBtn" onclick="run()">Phân tích</button>
   </div>
@@ -603,7 +609,7 @@ let totalFolds = 0, numModels = 0;
 let _modelOrder = [];
 const foldData = {};
 let analysisComplete = false;
-let currentSym = '', currentStart = '', currentEnd = '', currentHorizon = 5, currentMode = 'return';
+let currentSym = '', currentStart = '', currentEnd = '', currentHorizon = 5, currentMode = 'return', currentPriceType = 'close';
 
 /* ── Tab state ───────────────────────────────────────────── */
 const tabStore = {};
@@ -611,14 +617,15 @@ const tabOrder = [];
 let activeTabKey = null;
 const MAX_TABS = 10;
 
-function getTabKey(sym, start, end, horizon, mode){
-  return `${sym.toUpperCase()}|${start}|${end}|${horizon}|${mode||'return'}`;
+function getTabKey(sym, start, end, horizon, mode, priceType){
+  return `${sym.toUpperCase()}|${start}|${end}|${horizon}|${mode||'return'}|${priceType||'close'}`;
 }
 
 function createTab(key, meta){
   tabStore[key] = {
     symbol: meta.symbol, start: meta.start,
     end: meta.end, horizon: +meta.horizon, mode: meta.mode||'return',
+    price_type: meta.price_type||'close',
     result: null, foldData: {}
   };
   tabOrder.push(key);
@@ -644,7 +651,8 @@ function renderTabBar(){
     sym.className = 'tab-sym'; sym.textContent = entry.symbol;
     const meta = document.createElement('span');
     const modeLabel = entry.mode==='volatility'?' vol':'';
-    meta.className = 'tab-meta'; meta.textContent = `${s}–${e} h${entry.horizon}${modeLabel}`;
+    const priceLabel = entry.price_type==='open'?' open':entry.price_type==='typical'?' avg':'';
+    meta.className = 'tab-meta'; meta.textContent = `${s}–${e} h${entry.horizon}${modeLabel}${priceLabel}`;
     const btn = document.createElement('button');
     btn.className = 'tab-close'; btn.textContent = '×';
     btn.onclick = (ev)=>{ ev.stopPropagation(); closeTab(key); };
@@ -663,6 +671,7 @@ function switchTab(key){
   g('end').value = entry.end;
   g('horizon').value = String(entry.horizon);
   g('targetMode').value = entry.mode || 'return';
+  g('priceType').value = entry.price_type || 'close';
   if(entry.result){
     hide('err'); hide('empty');
     Object.keys(foldData).forEach(k=>delete foldData[k]);
@@ -800,14 +809,15 @@ async function run(){
   const end = g('end').value;
   const horizon = +g('horizon').value;
   const mode = g('targetMode').value || 'return';
-  const key = getTabKey(sym, start, end, horizon, mode);
+  const priceType = g('priceType').value || 'close';
+  const key = getTabKey(sym, start, end, horizon, mode, priceType);
 
   // Cache hit — switch immediately without re-fetching
   if(tabStore[key]){ switchTab(key); return; }
 
   if(activeES){ activeES.close(); activeES = null; }
 
-  currentSym = sym; currentStart = start; currentEnd = end; currentHorizon = horizon; currentMode = mode;
+  currentSym = sym; currentStart = start; currentEnd = end; currentHorizon = horizon; currentMode = mode; currentPriceType = priceType;
 
   const btn = g('runBtn'); btn.disabled = true;
   hide('results'); hide('verdict'); hide('err'); hide('empty');
@@ -820,7 +830,7 @@ async function run(){
 
   openModal(sym);
 
-  const params = new URLSearchParams({symbol: sym, start, end, horizon, mode});
+  const params = new URLSearchParams({symbol: sym, start, end, horizon, mode, price_type: priceType});
   const es = new EventSource(`/api/analyze-stream?${params}`);
   activeES = es;
 
@@ -967,10 +977,10 @@ function onComplete(ev){
   updateModalProgress(100, 'Hoàn tất!');
   lastResult = ev.result;
 
-  const key = getTabKey(currentSym, currentStart, currentEnd, currentHorizon, currentMode);
+  const key = getTabKey(currentSym, currentStart, currentEnd, currentHorizon, currentMode, currentPriceType);
   const isNew = !tabStore[key];
   if(isNew && tabOrder.length >= MAX_TABS) evictOldestTab();
-  if(isNew) createTab(key, {symbol:currentSym, start:currentStart, end:currentEnd, horizon:currentHorizon, mode:currentMode});
+  if(isNew) createTab(key, {symbol:currentSym, start:currentStart, end:currentEnd, horizon:currentHorizon, mode:currentMode, price_type:currentPriceType});
   saveToTab(key, ev.result, Object.assign({}, ...Object.keys(foldData).map(k=>({[k]:[...foldData[k]]}))));
   activeTabKey = key;
   renderTabBar();
@@ -1006,10 +1016,12 @@ function render(d){
   const srcReal = d.source==='vnstock';
   const targetLabel = isVol ? 'σ biến động mục tiêu' : 'σ lợi suất mục tiêu';
   const modeLabel = isVol ? 'Biến động (vol)' : 'Lợi suất (return)';
+  const priceTypeLabel = d.price_type==='open' ? 'Mở cửa' : d.price_type==='typical' ? 'Trung bình' : 'Đóng cửa';
   g('metaRow').innerHTML =
     `<span>Mã: <b>${d.symbol}</b></span><span>Nguồn: <b class="${srcReal?'src-real':'src-syn'}">${d.source}</b></span>`+
     `<span>Số phiên: <b>${d.n_obs}</b></span><span>Chân trời: <b>${d.horizon} phiên</b></span>`+
     `<span>Mục tiêu: <b>${modeLabel}</b></span>`+
+    `<span>Giá cơ sở: <b>${priceTypeLabel}</b></span>`+
     `<span>${targetLabel}: <b>${d.target_std}</b></span>`;
   show('verdict');
   renderModelCards(d);

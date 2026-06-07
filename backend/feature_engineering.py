@@ -78,9 +78,10 @@ class FeatureBuilder:
     mode="volatility" → target = realized vol h phiên tới (rolling std of returns)
     """
 
-    def __init__(self, horizon: int = 5, mode: str = "return"):
+    def __init__(self, horizon: int = 5, mode: str = "return", price_type: str = "close"):
         self.horizon = horizon
         self.mode = mode
+        self.price_type = price_type  # "close" | "open" | "typical" = (H+L+C)/3
 
     @staticmethod
     def _rsi(close: pd.Series, period: int = 14) -> pd.Series:
@@ -96,7 +97,13 @@ class FeatureBuilder:
         fundamental_df: Optional[pd.DataFrame] = None,
     ) -> tuple[pd.DataFrame, pd.Series]:
         d = df.sort_values("date").reset_index(drop=True).copy()
-        c = d["close"]
+
+        if self.price_type == "open":
+            c = d["open"]
+        elif self.price_type == "typical":
+            c = (d["high"] + d["low"] + d["close"]) / 3
+        else:
+            c = d["close"]
 
         feat = pd.DataFrame(index=d.index)
 
@@ -121,7 +128,8 @@ class FeatureBuilder:
 
         # --- Biên độ trong phiên & vị trí đóng cửa ---
         feat["hl_range"] = (d["high"] - d["low"]) / c
-        feat["close_pos"] = (c - d["low"]) / (d["high"] - d["low"]).replace(0, np.nan)
+        # close_pos luôn dùng d["close"]: đo vị trí đóng cửa thực trong range ngày
+        feat["close_pos"] = (d["close"] - d["low"]) / (d["high"] - d["low"]).replace(0, np.nan)
 
         # --- Đặc trưng khối lượng ---
         vma20 = d["volume"].rolling(20).mean()

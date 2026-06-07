@@ -65,7 +65,7 @@ class AnalysisService:
             return None
 
     def _build_result(
-        self, symbol, source, horizon, mode, df, X, y, rows, baseline, best_spec, initial_train
+        self, symbol, source, horizon, mode, price_type, df, X, y, rows, baseline, best_spec, initial_train
     ) -> dict:
         """Đóng gói dict kết quả JSON-serializable."""
         scatter = self._scatter_for(best_spec, X, y, initial_train)
@@ -86,6 +86,7 @@ class AnalysisService:
             "source": source,
             "horizon": horizon,
             "mode": mode,
+            "price_type": price_type,
             "n_obs": len(X),
             "date_range": [price.iloc[0]["date"], price.iloc[-1]["date"]],
             "target_mean": round(float(y.mean()), 5),
@@ -101,13 +102,14 @@ class AnalysisService:
         }
 
     def analyze(
-        self, symbol: str, start: str, end: str, horizon: int = 5, mode: str = "return"
+        self, symbol: str, start: str, end: str, horizon: int = 5, mode: str = "return",
+        price_type: str = "close",
     ) -> dict:
         """Phân tích đồng bộ — trả dict JSON đầy đủ."""
         df, source = self._fetch_with_fallback(symbol, start, end)
         fundamental_df = self._fetch_fundamental(symbol, start, end)
 
-        builder = FeatureBuilder(horizon=horizon, mode=mode)
+        builder = FeatureBuilder(horizon=horizon, mode=mode, price_type=price_type)
         X, y = builder.build(df, fundamental_df=fundamental_df)
         n = len(X)
         if n < 200:
@@ -135,11 +137,12 @@ class AnalysisService:
                 best_rmse, best_spec = res.rmse, spec
 
         return self._build_result(
-            symbol, source, horizon, mode, df, X, y, rows, baseline, best_spec, initial_train
+            symbol, source, horizon, mode, price_type, df, X, y, rows, baseline, best_spec, initial_train
         )
 
     def analyze_stream(
-        self, symbol: str, start: str, end: str, horizon: int = 5, mode: str = "return"
+        self, symbol: str, start: str, end: str, horizon: int = 5, mode: str = "return",
+        price_type: str = "close",
     ) -> Generator[dict, None, None]:
         """Generator yield SSE events — mỗi giai đoạn ML là 1 cụm events."""
         q: queue.Queue = queue.Queue()
@@ -181,7 +184,7 @@ class AnalysisService:
 
                 # ── Giai đoạn 3: Feature Engineering ──────────────────────
                 q.put({"stage": "features_start"})
-                builder = FeatureBuilder(horizon=horizon, mode=mode)
+                builder = FeatureBuilder(horizon=horizon, mode=mode, price_type=price_type)
                 X, y = builder.build(df, fundamental_df=fundamental_df)
                 n = len(X)
 
@@ -294,7 +297,7 @@ class AnalysisService:
 
                 # ── Giai đoạn 5: Kết quả cuối ──────────────────────────────
                 result = self._build_result(
-                    symbol, source, horizon, mode, df, X, y, rows, baseline, best_spec, initial_train
+                    symbol, source, horizon, mode, price_type, df, X, y, rows, baseline, best_spec, initial_train
                 )
                 q.put({"stage": "complete", "result": result})
 
