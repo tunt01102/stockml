@@ -187,7 +187,7 @@ if "!PYTHON!" == "" (
     goto :end
 )
 
-for /f "tokens=*" %%V in ('"!PYTHON!" --version 2>&1') do set PY_VER=%%V
+for /f "tokens=*" %%V in ('"!PYTHON!" --version 2^>^&1') do set PY_VER=%%V
 echo        OK - !PY_VER!
 echo.
 
