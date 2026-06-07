@@ -28,7 +28,7 @@ import pandas as pd
 
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import FunctionTransformer, StandardScaler
 from sklearn.model_selection import (
     train_test_split,
     cross_val_score,
@@ -323,6 +323,9 @@ class RegressionModel:
         steps = []
         if spec.needs_scaling:
             steps.append(("scaler", StandardScaler()))
+            # Clip extreme scaled values (±5σ) — commodity/GARCH features can spike
+            # far beyond training distribution in test folds, causing matmul overflow.
+            steps.append(("clipper", FunctionTransformer(lambda X: np.clip(X, -5, 5))))
         steps.append(("model", spec.estimator))
         self.pipeline: Pipeline = Pipeline(steps)
 
