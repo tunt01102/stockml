@@ -88,11 +88,16 @@ if [ -z "$PYTHON" ]; then
         echo "   -->  Homebrew tim thay. Dang cai Python 3.12..."
         brew install python@3.12 2>&1 | grep -E "(Already installed|Pouring|Installing|Error|Warning)" || true
         brew link --overwrite python@3.12 2>/dev/null || true
-        for p in /opt/homebrew/bin/python3.12 /usr/local/bin/python3.12; do
+        for p in \
+            /opt/homebrew/opt/python@3.12/bin/python3.12 \
+            /opt/homebrew/bin/python3.12 \
+            /usr/local/opt/python@3.12/bin/python3.12 \
+            /usr/local/bin/python3.12
+        do
             if _python_ok "$p"; then PYTHON="$p"; break; fi
         done
-        [ -z "$PYTHON" ] && _python_ok python3.12 && PYTHON="python3.12" || true
-        [ -z "$PYTHON" ] && _python_ok python3    && PYTHON="python3"    || true
+        if [ -z "$PYTHON" ]; then _python_ok python3.12 && PYTHON="python3.12" || true; fi
+        if [ -z "$PYTHON" ]; then _python_ok python3    && PYTHON="python3"    || true; fi
         CERT_CMD="/Applications/Python 3.12/Install Certificates.command"
         [ -f "$CERT_CMD" ] && bash "$CERT_CMD" > /dev/null 2>&1 || true
     else
@@ -134,6 +139,13 @@ fi
 PY_VER="$("$PYTHON" --version 2>&1)"
 echo "  [OK]  $PY_VER"
 echo ""
+
+# -- Kiem tra pip co san (Python 3.10+ thuong co san, kiem tra cho chac) ------
+"$PYTHON" -m pip --version > /dev/null 2>&1 || {
+    echo "   -->  Bootstrapping pip..."
+    "$PYTHON" -m ensurepip --upgrade > /dev/null 2>&1 || \
+        curl -sS https://bootstrap.pypa.io/get-pip.py | "$PYTHON"
+}
 
 # ── Buoc 2: Tao / kiem tra moi truong ao ─────────────────────────────────────
 echo "  [2/4] Tao / kiem tra moi truong ao..."
@@ -186,9 +198,9 @@ if "$PYTHON" -c "import fastapi, uvicorn, sklearn, pandas, arch" 2>/dev/null; th
 else
     echo "   -->  Lan dau cai dat: khoang 3-5 phut, vui long KHONG TAT cua so nay..."
     "$VENV_PIP" install --upgrade pip --quiet > /dev/null 2>&1
-    if ! "$VENV_PIP" install -r "$REQUIREMENTS" -q 2>&1; then
+    if ! "$VENV_PIP" install -r "$REQUIREMENTS"; then
         echo ""
-        echo " [LOI]  Cai dat thu vien that bai. Chi tiet loi:"
+        echo " [LOI]  Cai dat thu vien that bai."
         echo ""
         "$VENV_PIP" install -r "$REQUIREMENTS"
         echo ""
